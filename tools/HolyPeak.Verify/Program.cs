@@ -172,7 +172,8 @@ namespace HolyPeak.Verify
             if (walls)
                 for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, Strike = true });
             if (walls) acts.Add(new Act { My = -1, Strike = true });
-            if (room.Things.Any(t => t.Kind == ThingKind.Altar || t.Kind == ThingKind.GreatBell)) acts.Add(new Act { Up = true });
+            // a gate proves the way is shut without a relic, so it may not pick one up on the way
+            if (!c.ExpectFail && room.Things.Any(t => t.Kind == ThingKind.Altar || t.Kind == ThingKind.GreatBell)) acts.Add(new Act { Up = true });
             if (platforms) acts.Add(new Act { My = 1, Jump = 1 });
             _acts = acts.ToArray();
             _dist = Bfs();
