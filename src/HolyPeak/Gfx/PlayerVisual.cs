@@ -20,7 +20,7 @@ namespace HolyPeak.Gfx
         /// <summary>Set once every ember has been carried to the top: the scarf glows gold.</summary>
         public bool Golden;
         private Color Ready => Golden ? ScarfGold : ScarfReady;
-        public static readonly Color ScarfSpent = G.Hex(0x5cb8ff);
+        public static readonly Color ScarfSpent = G.Hex(0x8fdcff);
 
         private const int ScarfLen = 6;
         private readonly Vector2[] _scarf = new Vector2[ScarfLen];
@@ -208,7 +208,7 @@ namespace HolyPeak.Gfx
             for (int pass = 0; pass < 2; pass++)
                 for (int i = ScarfLen - 1; i >= 1; i--)
                 {
-                    float size = i < 3 ? 2 : 1;
+                    float size = i < 4 ? 2 : 1;
                     Color c = pass == 0 ? outline : (i >= ScarfLen - 2 ? G.Mul(_scarfColor, 0.78f) : _scarfColor) * alpha;
                     float s = size + (pass == 0 ? 2 : 0);
                     for (int st = 0; st < 3; st++)

@@ -46,6 +46,9 @@ namespace HolyPeak.Audio
                 ["bell"] = S(Bell()),
                 ["chapter"] = S(ChapterSwell()),
                 ["wind"] = new Clip { Data = WindLoop(), Channels = 1 },
+                ["bird"] = M(Bird()),
+                ["drip"] = M(Drip()),
+                ["chime"] = M(Chime()),
             };
             return d;
         }
@@ -481,6 +484,56 @@ namespace HolyPeak.Audio
             Array.Resize(ref b, b.Length - xf);
             Normalize(b, 0.5f);
             return b;
+        }
+
+        /// <summary>A distant two-note bird call.</summary>
+        private static float[] Bird()
+        {
+            var b = Mono(0.9f);
+            float[] starts = { 0f, 0.11f, 0.42f };
+            float[] f0 = { 2600f, 3100f, 2900f }, f1 = { 3400f, 3900f, 2300f };
+            for (int k = 0; k < starts.Length; k++)
+            {
+                float ph = 0;
+                for (int i = (int)(starts[k] * Rate); i < Math.Min(b.Length, (int)((starts[k] + 0.08f) * Rate)); i++)
+                {
+                    float t = i / (float)Rate - starts[k];
+                    float u = t / 0.08f;
+                    float freq = f0[k] + (f1[k] - f0[k]) * u + MathF.Sin(t * 180f) * 120f;
+                    ph += freq / Rate;
+                    b[i] += Sine(ph) * MathF.Sin(MathF.PI * u) * 0.35f;
+                }
+            }
+            return Down(MonoToStereoWithReverb(b, 0.5f, 0.75f, 0.4f));
+        }
+
+        /// <summary>A water drop echoing in a stone hall.</summary>
+        private static float[] Drip()
+        {
+            var b = Mono(1.2f);
+            float ph = 0;
+            for (int i = 0; i < (int)(0.06f * Rate); i++)
+            {
+                float t = i / (float)Rate;
+                float freq = 900 + 1400 * (t / 0.06f);
+                ph += freq / Rate;
+                b[i] = Sine(ph) * Exp(t, 0.02f) * 0.5f;
+            }
+            return Down(MonoToStereoWithReverb(b, 0.9f, 0.9f, 0.2f));
+        }
+
+        /// <summary>A soft, high temple chime.</summary>
+        private static float[] Chime()
+        {
+            var b = Mono(2.2f);
+            float f = 1568f;
+            for (int i = 0; i < b.Length; i++)
+            {
+                float t = i / (float)Rate;
+                float m = Sine(t * f * 2.76f) * 0.8f * Exp(t, 0.4f);
+                b[i] = (Sine(t * f + m / Tau) * Exp(t, 0.7f) + Sine(t * f * 1.5f) * 0.25f * Exp(t, 0.4f)) * MathF.Min(1, t / 0.003f) * 0.25f;
+            }
+            return Down(MonoToStereoWithReverb(b, 0.6f, 0.85f, 0.3f));
         }
 
         private static float Calc01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);

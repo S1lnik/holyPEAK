@@ -338,6 +338,21 @@ namespace HolyPeak.Scenes
             _cam = Vector2.Lerp(_cam, CameraTarget(), Calc.Damp(5f, dt));
             UpdateEmberFollow(dt);
             UpdateWindFx(dt);
+            UpdateAmbience(dt);
+        }
+
+        private float _ambT = 4f;
+
+        /// <summary>Occasional distant sounds that give each chapter its air.</summary>
+        private void UpdateAmbience(float dt)
+        {
+            _ambT -= dt;
+            if (_ambT > 0) return;
+            var rng = _parts.Rng;
+            _ambT = rng.Range(4f, 10f);
+            string snd = _chapter switch { 0 => "bird", 1 => "drip", 3 => "chime", _ => null };
+            if (snd == null) return;
+            AudioManager.Play(snd, rng.Range(0.12f, 0.25f), rng.Range(-0.25f, 0.2f), rng.Range(-0.8f, 0.8f));
         }
 
         private void UpdateEmberFollow(float dt)
@@ -842,12 +857,12 @@ namespace HolyPeak.Scenes
             _rr.DrawBack(sb);
             _rr.DrawTerrain(sb);
             _rr.DrawObjects(sb, _time, _shakeRng);
+            _rr.DrawHints(sb, _room.P.Center, _time);
             bool showPlayer = _phase != Phase.Dying && !(_phase == Phase.Wipe && _room.P.State == PState.Dead) &&
                               !(_phase == Phase.Respawning && _phaseT < 0.2f) && _phase != Phase.Prologue;
             if (showPlayer) _pv.Draw(sb, _room.P);
             _rr.DrawPickups(sb, _time);
             _parts.Draw(sb, false);
-            _rr.DrawHints(sb, _room.P.Center, _time);
             sb.End();
 
             sb.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.Additive, transformMatrix: world);
@@ -968,7 +983,9 @@ namespace HolyPeak.Scenes
             }
             var ch = Levels.Chapters[_chapter];
             font.DrawCentered(sb, "Paused", new Vector2(G.ViewW / 2f, 26), Color.White * a, Color.Black * a, 2f);
-            font.DrawCentered(sb, $"{ch.Subtitle} · {ch.Title}", new Vector2(G.ViewW / 2f, 52), accent * a);
+            int roomNo = _roomIndex - Levels.FirstRoomOfChapter(_chapter) + 1;
+            font.DrawCentered(sb, $"{ch.Subtitle} · {ch.Title} · Room {roomNo}/{Levels.RoomCountInChapter(_chapter)}",
+                new Vector2(G.ViewW / 2f, 52), accent * a);
             int got = 0;
             foreach (var r in Levels.All) if (r.Chapter == _chapter && Save.Embers.Contains(r.Id)) got++;
             string stats = $"Deaths {Save.Deaths}   Embers {Save.Embers.Count}/{Levels.EmberCount}   {Calc.FormatTime(Save.PlayTime, false)}";

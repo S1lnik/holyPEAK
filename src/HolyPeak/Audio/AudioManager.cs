@@ -55,7 +55,7 @@ namespace HolyPeak.Audio
         }
 
         /// <summary>Bump when any song or instrument changes so stale caches are ignored.</summary>
-        private const string CacheVersion = "v4";
+        private const string CacheVersion = "v4";  // music only; sound effects are always regenerated
 
         private static string CachePath(SongId id)
             => System.IO.Path.Combine(Core.Storage.Dir, "cache", $"music-{CacheVersion}-{id}.pcm");
