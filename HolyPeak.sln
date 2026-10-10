@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D3B97385-A0E6-4802-A85E-07AD03C57229}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyPeak", "src\HolyPeak\HolyPeak.csproj", "{00932427-8D83-4989-B91B-8A57B1A6E63F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{A36E2182-CE32-4641-AEF8-90903D20EBC5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyPeak.Verify", "tools\HolyPeak.Verify\HolyPeak.Verify.csproj", "{C1BB7012-C224-415E-8293-5597D0A6361C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{00932427-8D83-4989-B91B-8A57B1A6E63F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00932427-8D83-4989-B91B-8A57B1A6E63F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00932427-8D83-4989-B91B-8A57B1A6E63F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00932427-8D83-4989-B91B-8A57B1A6E63F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1BB7012-C224-415E-8293-5597D0A6361C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1BB7012-C224-415E-8293-5597D0A6361C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1BB7012-C224-415E-8293-5597D0A6361C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1BB7012-C224-415E-8293-5597D0A6361C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{00932427-8D83-4989-B91B-8A57B1A6E63F} = {D3B97385-A0E6-4802-A85E-07AD03C57229}
+		{C1BB7012-C224-415E-8293-5597D0A6361C} = {A36E2182-CE32-4641-AEF8-90903D20EBC5}
+	EndGlobalSection
+EndGlobal
