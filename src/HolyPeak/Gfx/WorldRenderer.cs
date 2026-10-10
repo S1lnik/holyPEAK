@@ -472,7 +472,7 @@ namespace HolyPeak.Gfx
             {
                 var s = w.Segment(i);
                 if (s.Y > floor + 3) continue;
-                float rad = i < 3 ? 7 : (i < 7 ? 6 : (i < 10 ? 5 : 4));
+                float rad = FrostWyrm.SegmentRadius(i);
                 G.DiscAt(sb, s, rad + 1, o);
                 G.DiscAt(sb, s, rad, i % 2 == 0 ? ice : iceD);
                 G.Rect(sb, MathF.Round(s.X) - 1, MathF.Round(s.Y - rad + 1), 2, 2, iceL);

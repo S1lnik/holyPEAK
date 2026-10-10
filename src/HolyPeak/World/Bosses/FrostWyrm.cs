@@ -10,9 +10,9 @@ namespace HolyPeak.World
     /// </summary>
     public sealed class FrostWyrm : Boss
     {
-        public const int Segments = 13;
+        public const int Segments = 17;
         public const float SegLen = 6.5f;
-        private enum S { Hidden, Plume, Arc, Rise, Inhale, Breath, Sink, Quake, Rage }
+        private enum S { Hidden, Plume, Arc, Rise, Inhale, Breath, Sink, Quake, Rage, Dazed }
 
         private readonly float _floor;
         private float _left, _right;
@@ -26,6 +26,7 @@ namespace HolyPeak.World
         public bool Inhaling => State == (int)S.Inhale;
         public bool Breathing => State == (int)S.Breath;
         public bool Quaking => State == (int)S.Quake;
+        public bool Dazed => State == (int)S.Dazed;
         public float Floor => _floor;
 
         public FrostWyrm(Point spawn, Room room) : base("wyrm", "The Frost Wyrm", "Serpent of the Old Ice", 124, spawn, 240)
@@ -34,6 +35,8 @@ namespace HolyPeak.World
             Head = new Vector2(spawn.X, _floor + 40);
             for (int i = 0; i < _trail.Length; i++) _trail[i] = Head;
         }
+
+        public static int SegmentRadius(int i) => i < 4 ? 7 : (i < 9 ? 6 : (i < 13 ? 5 : (i < 15 ? 4 : 3)));
 
         /// <summary>Body segment i, spaced evenly along the path the head has travelled.</summary>
         public Vector2 Segment(int i)
@@ -138,11 +141,25 @@ namespace HolyPeak.World
                     float y = _floor + 26 - 4 * 112f * s * (1 - s);
                     Head = new Vector2(x, y);
                     Facing = _x1 > _x0 ? 1 : -1;
-                    if (_s >= 1.35f)
+                    if (_s >= 1.08f)
                     {
+                        // it hits the frozen ground hard and comes up dazed: the moment to strike
                         _arcs--;
+                        PlumeAt = new Vector2(_x1, _floor);
+                        Go(S.Dazed, _arcs > 0 ? 0.55f : (Phase == 2 ? 0.8f : 1.05f));
+                        r.Emit(Ev.BossCue, PlumeAt, index: 43);
+                    }
+                    break;
+                }
+
+                case S.Dazed:
+                {
+                    float k = 1 - T / 1.05f;
+                    Head = new Vector2(_x1 + MathF.Sin(Time * 25) * 1.5f, _floor - 12 - MathF.Sin(Math.Min(1, k * 3) * MathF.PI * 0.5f) * 6);
+                    if (T <= 0)
+                    {
                         if (_arcs > 0) StartArc(r, p.X);
-                        else Go(S.Hidden, (Phase == 2 ? 0.55f : 0.8f));
+                        else Go(S.Hidden, Phase == 2 ? 0.5f : 0.7f);
                     }
                     break;
                 }
@@ -237,12 +254,13 @@ namespace HolyPeak.World
                 var head = new Rectangle((int)Head.X - 8, (int)Head.Y - 7, 16, 14);
                 Hurt.Add(head);
                 Harm.Add((head, State == (int)S.Arc ? 2 : 1));
+                if (State == (int)S.Dazed) { Harm.Clear(); Harm.Add((new Rectangle(head.X + 3, head.Y + 3, head.Width - 6, head.Height - 6), 1)); }
             }
             for (int i = 0; i < Segments; i++)
             {
                 var s = Segment(i);
                 if (!Above(s)) continue;
-                int rad = i < 3 ? 7 : (i < 7 ? 6 : (i < 10 ? 5 : 4));
+                int rad = SegmentRadius(i);
                 var box = new Rectangle((int)s.X - rad, (int)s.Y - rad, rad * 2, rad * 2);
                 if (i < 3) Hurt.Add(box);
                 box.Inflate(-1, -1);

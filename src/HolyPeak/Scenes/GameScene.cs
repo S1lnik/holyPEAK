@@ -83,6 +83,7 @@ namespace HolyPeak.Scenes
         private struct Amb { public Vector2 P, V; public float Phase, Size; }
         private Amb[] _amb = Array.Empty<Amb>();
 
+        private readonly System.Diagnostics.Stopwatch _loadWatch = new System.Diagnostics.Stopwatch();
         private SaveData Save => Game.Save;
         private Settings Cfg => Game.Settings;
 
@@ -158,7 +159,12 @@ namespace HolyPeak.Scenes
             }
         }
 
-        public override void OnQuit() => Persist();
+        public override void OnQuit()
+        {
+            if (Game.Auto != null && _room?.Boss != null) Console.WriteLine($"[auto] boss {_room.Boss.Id} hp {_room.Boss.Hp}/{_room.Boss.MaxHp} phase {_room.Boss.Phase}");
+            if (Game.Auto != null && _room != null) Console.WriteLine($"[auto] end: kills {Save.Kills} embers {Save.Embers} hp {_room.P.Hp}/{_room.P.MaxHp} flasks {_room.P.Flasks} alive {_room.Enemies.Count(e => e.Alive)}/{_room.Enemies.Length}");
+            Persist();
+        }
 
         public override void End()
         {
@@ -187,6 +193,7 @@ namespace HolyPeak.Scenes
 
         private void LoadRoom(RoomDef def, ThingKind? spawnAt, Vector2? local = null, Vector2? speed = null)
         {
+            _loadWatch.Restart();
             var carry = _room?.P ?? _carry;
             _wr?.Dispose();
             _room = new Room(def, _flags, noEnemies: Game.Auto?.Peaceful == true)
@@ -219,7 +226,7 @@ namespace HolyPeak.Scenes
             }
             if (!Save.Visited.Contains(def.Id)) Save.Visited.Add(def.Id);
             Save.Room = def.Id;
-            if (Game.Auto != null) Console.WriteLine($"[auto] room {def.Id} ({region.Id}) hp {_room.P.Hp}/{_room.P.MaxHp} embers {Save.Embers}");
+            if (Game.Auto != null) Console.WriteLine($"[auto] room {def.Id} ({region.Id}) hp {_room.P.Hp}/{_room.P.MaxHp} embers {Save.Embers} built in {_loadWatch.ElapsedMilliseconds} ms");
         }
 
         private void ShowAreaCard()
@@ -340,8 +347,49 @@ namespace HolyPeak.Scenes
             }
         }
 
+        private int _botT;
+        private bool _botJump;
+
+        /// <summary>Automation only: a crude fighter that walks up to the nearest foe and hits it.</summary>
+        private PlayerInput BotInput()
+        {
+            _botT++;
+            var inp = new PlayerInput();
+            var p = _room.P;
+            var c = p.Center;
+            Vector2? target = null;
+            var b = _room.Boss;
+            if (b != null && b.Active && !b.Dead && !b.InIntro)
+                target = b.Hurtboxes.Count > 0 ? b.Hurtboxes[0].Center.ToVector2() : new Vector2(b.X, b.Y - 16);
+            else
+            {
+                float best = 1e9f;
+                foreach (var e in _room.Enemies)
+                    if (e.Alive && Vector2.DistanceSquared(e.Center, c) < best) { best = Vector2.DistanceSquared(e.Center, c); target = e.Center; }
+            }
+            // answer the great bell's rings, and break the keeper's ward
+            foreach (var pr in _room.Projectiles)
+                if (pr.Active && pr.Type == ProjType.Ring && Math.Abs(Vector2.Distance(c, new Vector2(pr.X, pr.Y)) - pr.R) < 14) inp.TollPressed = true;
+            if (b is Bellkeeper k && k.ShieldUp && Vector2.Distance(c, new Vector2(k.X, k.Y - 20)) < 60) inp.TollPressed = _botT % 20 == 0;
+            if (target == null) return inp;
+            float dx = target.Value.X - c.X, dy = target.Value.Y - c.Y;
+            inp.MoveX = (sbyte)(Math.Abs(dx) > 16 ? Math.Sign(dx) : (Math.Sign(dx) != p.Facing && Math.Abs(dx) > 3 ? Math.Sign(dx) : 0));
+            if (dy < -20 && p.OnGround && Math.Abs(dx) < 30 && _botT % 20 == 0) { inp.JumpPressed = true; _botJump = true; }
+            if (p.OnGround && !inp.JumpPressed) _botJump = false;
+            inp.Jump = _botJump;
+            bool near = Math.Abs(dx) < 28 && Math.Abs(dy) < 40;
+            if (near && _botT % 12 == 0)
+            {
+                inp.StrikePressed = true;
+                if (dy < -14 && Math.Abs(dx) < 20) inp.MoveY = -1;
+                else if (dy > 14 && !p.OnGround) inp.MoveY = 1;
+            }
+            return inp;
+        }
+
         private PlayerInput ReadInput()
         {
+            if (Game.Auto?.AutoFight == true) return BotInput();
             if (_replay != null)
             {
                 var r = _replayIdx < _replay.Count ? _replay[_replayIdx] : default;

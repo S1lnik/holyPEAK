@@ -79,7 +79,7 @@ namespace HolyPeak.Scenes
                 y += 11;
             }
             y += 3;
-            f.DrawCentered(sb, "Hold Down and strike in the air to bounce off foes and thorns.",
+            f.DrawCentered(sb, "Strike while holding Down in the air to bounce.",
                 new Vector2(G.ViewW / 2f, y), new Color(190, 190, 210) * alpha);
             f.DrawCentered(sb, Input.Format("{CONFIRM} back"), new Vector2(G.ViewW / 2f, G.ViewH - 21), accent * (0.8f * alpha));
         }

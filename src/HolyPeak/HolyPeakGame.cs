@@ -24,6 +24,7 @@ namespace HolyPeak
         public bool Invincible;          // assist invincibility (for watching guardians)
         public string DumpSprites;       // write the sprite atlas to this PNG
         public bool Peaceful;            // no creatures or guardians (to replay verifier routes)
+        public bool AutoFight;           // a crude bot fights whatever is nearest
     }
 
     public sealed class HolyPeakGame : Game

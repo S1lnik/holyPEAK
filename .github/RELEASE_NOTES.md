@@ -1,5 +1,16 @@
-**Holy Peak** is a precision platformer about climbing a sacred mountain to ring a bell that has been silent for a thousand years.
-Four chapters, 24 rooms, 12 hidden embers, and an original soundtrack. All art, music and sound are generated in code.
+**Holy Peak 2.0** turns the climb into a journey across one interconnected mountain.
+Explore five regions, fight with your pilgrim's staff, trade embers with Old Tam, find the Iron Grips, the Bell of Resonance and the Pilgrim's Kite, and face four guardians on the way to the great bell. All art, music and sound are generated in code.
+
+### What's new in 2.0
+
+- **A connected world** of 33 chambers: Pilgrim's Rest, Thornwood, the Sunken Abbey, Frostwind Cliffs and the Holy Peak, with a map, five shrines, shortcuts, and secrets that open up as you find new relics.
+- **A new pilgrim and a new way to move**: strike with your staff (and bounce off foes and thorns with a downward strike), cling and leap with the Iron Grips, ring the Bell of Resonance to shatter bell-glass and wake resonance stones, and glide on updrafts with the Pilgrim's Kite.
+- **Combat**: six kinds of creatures and four guardians: Thornback, the Hollow Abbot, the Frost Wyrm and the Bellkeeper.
+- **Health, healing and embers**: vigil flames, balm flasks, a peddler's shop, and a lingering flame that keeps your embers where you fell.
+- **Darkness and light**: caves and crypts are dark, and the lantern on your staff, candles and lit windows push the dark back.
+- New sound effects for every action, and new music for the village and the guardians.
+
+Saves from version 1 are not carried over: 2.0 is a new journey.
 
 ## Download
 
@@ -22,11 +33,14 @@ Nothing needs installing: each download includes everything it needs.
 
 | Action | Keyboard | Gamepad |
 |---|---|---|
-| Move / aim | Arrow keys or WASD | Left stick / D-pad |
-| Jump | C, Space or J | A |
-| Dash | X, Shift or K | X, B, RB or RT |
+| Move, look | Arrow keys or WASD | Left stick or D-pad |
+| Jump, open the kite | Z or Space | A |
+| Strike | X or J | X |
+| Ring the bell | C or K | Y or RB |
+| Heal (hold) | V or L | B or LB |
+| Rest, talk, use | Up or W | Up |
+| Map | Tab or M | Back |
 | Pause | Esc or Enter | Start |
-| Restart room | R | Back |
 | Fullscreen | F11 | |
 
-Assist options (game speed, infinite dash, invincibility) are in Options.
+Assist options (game speed, invincibility) are in Options.

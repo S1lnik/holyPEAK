@@ -113,7 +113,7 @@ namespace HolyPeak.Scenes
                 case 1:
                 {
                     float a = Calc.Clamp01(_t / 0.8f);
-                    Fx.Panel(sb, 54, 18, G.ViewW - 108, 146, a, accent);
+                    Fx.Panel(sb, 36, 18, G.ViewW - 72, 146, a, accent);
                     font.DrawCentered(sb, "The Bell Has Rung", new Vector2(G.ViewW / 2f, 26), accent * a, Color.Black * a, 2f);
                     Fx.Ornament(sb, new Vector2(G.ViewW / 2f, 51), 60, accent * (0.7f * a));
                     double time = Save.FirstClearTime > 0 ? Save.FirstClearTime : Save.PlayTime;
@@ -126,7 +126,7 @@ namespace HolyPeak.Scenes
                     Row(sb, "Mountain found", pct + "%", 96, a);
                     string note = pct >= 100
                         ? "Nothing on the mountain is hidden from you now."
-                        : (pct >= 75 ? "A few secrets still sleep on the mountain." : "Much of the mountain is still waiting for you.");
+                        : (pct >= 75 ? "A few secrets still sleep on the mountain." : "Much of the mountain still waits for you.");
                     font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 112), new Color(220, 210, 190) * a);
                     if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 128), new Color(150, 150, 170) * a);
                     if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 142), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
