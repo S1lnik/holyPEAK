@@ -44,7 +44,6 @@ namespace HolyPeak.Scenes
             m.Option("Screen Shake", () => OnOff(s.ScreenShake), d => s.ScreenShake = !s.ScreenShake);
             m.Option("Speedrun Timer", () => OnOff(s.ShowTimer), d => s.ShowTimer = !s.ShowTimer);
             m.Option("Game Speed", () => $"{s.GameSpeed * 10}%", d => s.GameSpeed = Math.Clamp(s.GameSpeed + d, 5, 10), 3);
-            m.Option("Infinite Dash", () => OnOff(s.InfiniteDash), d => s.InfiniteDash = !s.InfiniteDash);
             m.Option("Invincibility", () => OnOff(s.Invincible), d => s.Invincible = !s.Invincible);
             m.Add("Controls", showControls, spacing: 3);
             m.Add("Back", m.Back);
@@ -53,34 +52,36 @@ namespace HolyPeak.Scenes
 
         public static readonly (string action, string keys, string pad)[] Controls =
         {
-            ("Move", "Arrow keys / WASD", "Left stick / D-pad"),
-            ("Jump", "C / Space / J", "A"),
-            ("Dash", "X / Shift / K", "X / B / RT"),
+            ("Move / look", "Arrows / WASD", "Stick / D-pad"),
+            ("Jump", "Z / Space", "A"),
+            ("Strike", "X / J", "X"),
+            ("Toll the bell", "C / K", "Y / RB"),
+            ("Heal (hold)", "V / L", "B / LB"),
+            ("Use / talk", "Up / W", "Up"),
+            ("Map", "Tab / M", "Back"),
             ("Pause", "Esc / Enter", "Start"),
-            ("Restart room", "R", "Back"),
-            ("Fullscreen", "F11", "-"),
         };
 
         public static void DrawControls(SpriteBatch sb, float alpha, Color accent)
         {
             var f = G.Font;
-            Fx.Panel(sb, 24, 22, G.ViewW - 48, G.ViewH - 44, alpha, accent);
-            f.DrawCentered(sb, "Controls", new Vector2(G.ViewW / 2f, 30), accent * alpha, Color.Black * alpha);
-            float y = 50;
-            f.Draw(sb, "Keyboard", new Vector2(120, y), new Color(150, 150, 170) * alpha);
-            f.Draw(sb, "Gamepad", new Vector2(222, y), new Color(150, 150, 170) * alpha);
-            y += 14;
+            Fx.Panel(sb, 20, 10, G.ViewW - 40, G.ViewH - 20, alpha, accent);
+            f.DrawCentered(sb, "Controls", new Vector2(G.ViewW / 2f, 17), accent * alpha, Color.Black * alpha);
+            float y = 32;
+            f.Draw(sb, "Keyboard", new Vector2(118, y), new Color(150, 150, 170) * alpha);
+            f.Draw(sb, "Gamepad", new Vector2(212, y), new Color(150, 150, 170) * alpha);
+            y += 12;
             foreach (var (action, keys, pad) in Controls)
             {
-                f.Draw(sb, action, new Vector2(36, y), Color.White * alpha);
-                f.Draw(sb, keys, new Vector2(120, y), new Color(220, 220, 235) * alpha);
-                f.Draw(sb, pad, new Vector2(222, y), new Color(220, 220, 235) * alpha);
-                y += 13;
+                f.Draw(sb, action, new Vector2(30, y), Color.White * alpha);
+                f.Draw(sb, keys, new Vector2(118, y), new Color(220, 220, 235) * alpha);
+                f.Draw(sb, pad, new Vector2(212, y), new Color(220, 220, 235) * alpha);
+                y += 11;
             }
-            y += 4;
-            f.DrawCentered(sb, "Dash in any of eight directions. Touching the ground,\na spring or a crystal gives your dash back.",
+            y += 3;
+            f.DrawCentered(sb, "Hold Down and strike in the air to bounce off foes and thorns.",
                 new Vector2(G.ViewW / 2f, y), new Color(190, 190, 210) * alpha);
-            f.DrawCentered(sb, Input.Format("{CONFIRM} back"), new Vector2(G.ViewW / 2f, G.ViewH - 34), accent * (0.8f * alpha));
+            f.DrawCentered(sb, Input.Format("{CONFIRM} back"), new Vector2(G.ViewW / 2f, G.ViewH - 21), accent * (0.8f * alpha));
         }
     }
 }

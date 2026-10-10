@@ -15,6 +15,8 @@ namespace HolyPeak.Audio
             SongId.Ruins => Ruins(),
             SongId.Frost => Frost(),
             SongId.Peak => Peak(),
+            SongId.Village => Village(),
+            SongId.Boss => Boss(),
             _ => Ending(),
         };
 
@@ -240,6 +242,63 @@ namespace HolyPeak.Audio
             s.Line(Inst.Flute, 16 * 4, 0.5f, melB, 0.95f, 0.1f);
             s.Line(Inst.Flute, 24 * 4, 0.5f, melA, 0.95f, 0.1f);
             s.Line(Inst.Lead, 24 * 4, 0.5f, melA, 0.35f, -0.3f, -12);
+            return s;
+        }
+
+        // ---- Pilgrim's Rest: the village (F major, 84 bpm) ---------------------------------
+
+        private static Score Village()
+        {
+            var s = new Score(84, 24) { ReverbSize = 0.8f, DelayBeats = 0.75f, DelayFeedback = 0.3f };
+            string[] A = { "F", "C/E", "Dm", "Bb", "F", "C/E", "Bb", "C" };
+            string[] B = { "Dm", "Bb", "F", "C", "Gm", "Bb", "C", "C" };
+            var all = Concat(A, B, A);
+            Arp(s, Inst.Pluck, all, 0, 53, 5, new[] { 0, 2, 4, 2, 3, 2, 4, 1 }, 0.5f, 0.6f, pan: -0.2f);
+            Pads(s, Inst.Keys, all, 0, 53, 3, 0.35f);
+            Bass(s, Inst.Bass, all, 0, 36, "R---5-R-", 0.55f);
+            Drum(s, Inst.Shaker, 8, 16, "o...x...o...x...", 0.45f, pan: 0.3f);
+            Drum(s, Inst.Rim, 8, 8, "........x.......", 0.4f);
+            string mel =
+                "F5 - - - G5 - A5 - | C6 - - - - - Bb5 A5 | A5 - - - G5 - F5 - | D5 - - - - - - - | " +
+                "F5 - - - G5 - A5 - | C6 - - - F6 - - - | D6 - - - C6 - Bb5 - | C6 - - - - - - -";
+            string melB =
+                "A5 - - - D6 - C6 - | Bb5 - - - F5 - - - | A5 - - - C6 - F6 - | E6 - - - - - - - | " +
+                "D6 - - - C6 - Bb5 - | D6 - - - C6 - Bb5 - | A5 - - - G5 - E5 - | G5 - - - - - - -";
+            s.Line(Inst.Flute, 0, 0.5f, mel, 0.75f, 0.12f);
+            s.Line(Inst.Flute, 8 * 4, 0.5f, melB, 0.8f, 0.12f);
+            s.Line(Inst.Flute, 16 * 4, 0.5f, mel, 0.8f, 0.12f);
+            s.Line(Inst.Bell, 16 * 4, 0.5f, mel, 0.22f, -0.4f, 12);
+            return s;
+        }
+
+        // ---- The guardians (C minor, 148 bpm) ----------------------------------------------
+
+        private static Score Boss()
+        {
+            var s = new Score(148, 32) { ReverbSize = 0.75f, ReverbDamp = 0.4f, DelayBeats = 0.75f, DelayFeedback = 0.25f };
+            string[] A = { "Cm", "Cm", "Ab", "Ab", "Fm", "Fm", "G", "G" };
+            string[] B = { "Cm", "Bb", "Ab", "G", "Cm", "Bb", "Ab", "G" };
+            string[] C = { "Fm", "Ab", "Eb", "Bb", "Fm", "Ab", "G", "G" };
+            var all = Concat(A, B, C, B);
+            Bass(s, Inst.SynthBass, all, 0, 36, "RRORRR5R", 0.8f);
+            Arp(s, Inst.Arp, all, 0, 60, 5, new[] { 0, 1, 2, 4, 2, 1, 3, 4, 0, 1, 2, 4, 3, 2, 1, 2 }, 0.25f, 0.55f, alternatePan: true);
+            Pads(s, Inst.Choir, Concat(C, B), 16, 55, 3, 0.55f);
+            Drum(s, Inst.Kick, 0, 32, "x.....x.x.....x.", 0.85f);
+            Drum(s, Inst.Snare, 4, 28, "....x.......x...", 0.75f);
+            Drum(s, Inst.Hat, 0, 32, "x.o.x.o.x.o.x.o.", 0.5f, pan: 0.25f);
+            Drum(s, Inst.Tom, 8, 24, "..........x..o.o", 0.45f, 45, -0.2f);
+            for (int bar = 0; bar < 32; bar += 4) s.Add(Inst.Timpani, 36, bar * 4, 2, 0.85f);
+            for (int bar = 7; bar < 32; bar += 8) Drum(s, Inst.Snare, bar, 1, "........x.xoxxxx", 0.6f);
+            string melA =
+                "C5 - D5 - Eb5 - G5 - | G5 - - - F5 - Eb5 - | Eb5 - - - D5 - C5 - | Ab4 - - - - - - - | " +
+                "C5 - D5 - Eb5 - G5 - | C6 - - - Bb5 - G5 - | Ab5 - - - G5 - F5 - | D5 - - - B4 - - -";
+            string melC =
+                "F5 - - - Ab5 - C6 - | Eb6 - - - D6 - C6 - | Bb5 - - - G5 - Eb5 - | F5 - - - - - - - | " +
+                "F5 - - - Ab5 - C6 - | Eb6 - - - F6 - Eb6 - | D6 - - - B5 - G5 - | B5 - - - D6 - - -";
+            s.Line(Inst.Lead, 8 * 4, 0.5f, melA, 0.85f, 0.05f);
+            s.Line(Inst.Lead, 16 * 4, 0.5f, melC, 0.9f, 0.05f);
+            s.Line(Inst.Lead, 24 * 4, 0.5f, melA, 0.9f, 0.05f);
+            s.Line(Inst.Bell, 24 * 4, 0.5f, melA, 0.25f, -0.4f, 12);
             return s;
         }
 

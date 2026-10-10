@@ -30,7 +30,7 @@ namespace HolyPeak.Gfx
             _sky = MakeSky(st);
             _peak = peakHeight > 0 ? MakePeak(st, seed, peakHeight, peakHaze, night) : null;
             _far = MakeRange(st, seed + 1, 120, 70, 5, G.Mix(st.MountFar, st.Haze, 0.25f), true, 0.45f);
-            _mid = MakeRange(st, seed + 2, 120, 52, 7, st.MountMid, st.Id != 3, 0.25f);
+            _mid = MakeRange(st, seed + 2, 120, 52, 7, st.MountMid, st.Id != 4, 0.25f);
             _near = MakeRange(st, seed + 3, 110, 38, 9, st.MountNear, false, 0.1f);
             var gd = new Color[48];
             for (int i = 0; i < gd.Length; i++) { float t = i / (float)(gd.Length - 1); gd[i] = Color.White * (MathF.Pow(1 - t, 1.6f) * MathF.Min(1, t * 6)); }
@@ -38,12 +38,13 @@ namespace HolyPeak.Gfx
             _sil = st.Id switch
             {
                 0 => MakeForest(st, seed + 4),
-                1 => MakeRuins(st, seed + 4),
-                2 => MakeSpires(st, seed + 4),
-                3 => MakeCloudSea(st, seed + 4, 0.35f),
+                1 => MakeForest(st, seed + 4, 2),
+                2 => MakeRuins(st, seed + 4),
+                3 => MakeSpires(st, seed + 4),
+                4 => MakeCloudSea(st, seed + 4, 0.35f),
                 _ => MakeForest(st, seed + 4),
             };
-            if (st.Id == 3) _clouds = MakeCloudSea(st, seed + 9, 0.0f);
+            if (st.Id == 4) _clouds = MakeCloudSea(st, seed + 9, 0.0f);
             var rng = new Rng(seed);
             _stars = new Vector2[st.Stars ? 110 : 0];
             _starPhase = new float[_stars.Length];
@@ -93,10 +94,10 @@ namespace HolyPeak.Gfx
 
             DrawLayer(sb, _far, cam.X * 0.05f, G.ViewH - _far.Height + 26 + lift * 0.45f, tint);
             DrawLayer(sb, _mid, cam.X * 0.11f, G.ViewH - _mid.Height + 40 + lift * 0.7f, tint);
-            if (_st.Id == 3)
+            if (_st.Id == 4)
                 DrawLayer(sb, _clouds, cam.X * 0.18f + time * 3f, G.ViewH - _clouds.Height + 52 + lift, tint * 0.8f);
             DrawLayer(sb, _near, cam.X * 0.2f, G.ViewH - _near.Height + 54 + lift * 0.9f, tint);
-            DrawLayer(sb, _sil, cam.X * 0.34f + (_st.Id == 3 ? time * 6f : 0), G.ViewH - _sil.Height + 62 + lift * 1.15f, tint);
+            DrawLayer(sb, _sil, cam.X * 0.34f + (_st.Id == 4 ? time * 6f : 0), G.ViewH - _sil.Height + 62 + lift * 1.15f, tint);
 
             // haze toward the horizon
             for (int i = 0; i < 6; i++)
@@ -118,7 +119,16 @@ namespace HolyPeak.Gfx
                     G.DiscAt(sb, c, 11, G.Hex(0xfff3d6) * b);
                     break;
                 }
-                case 1: // huge setting sun
+                case 1: // a pale green moon low behind the trees
+                {
+                    var c = new Vector2(96 - cam.X * 0.012f, 46 + lift * 0.2f);
+                    G.GlowAt(sb, c, 90, G.Hex(0xc8f0b0) * (0.22f * b));
+                    G.DiscAt(sb, c, 14, G.Hex(0xe8f6d8) * b);
+                    G.DiscAt(sb, c + new Vector2(-4, 2), 3, G.Hex(0xc8dcb8) * b);
+                    G.DiscAt(sb, c + new Vector2(5, -4), 2, G.Hex(0xc8dcb8) * b);
+                    break;
+                }
+                case 2: // huge setting sun
                 {
                     var c = new Vector2(250 - cam.X * 0.015f, G.ViewH - 48 + lift * 0.3f);
                     G.GlowAt(sb, c, 140, G.Hex(0xff9a5a) * (0.35f * b));
@@ -126,10 +136,10 @@ namespace HolyPeak.Gfx
                     for (int i = 0; i < 4; i++) G.Rect(sb, c.X - 24, c.Y - 6 + i * 5, 48, 1 + i, G.Hex(0xc7637a) * (0.55f * b));
                     break;
                 }
-                case 2: // cold moon
-                case 4:
+                case 3: // cold moon
+                case 5:
                 {
-                    var c = new Vector2(_st.Id == 4 ? 64 : 262 - cam.X * 0.01f, 34 + lift * 0.15f);
+                    var c = new Vector2(_st.Id == 5 ? 64 : 262 - cam.X * 0.01f, 34 + lift * 0.15f);
                     G.GlowAt(sb, c, 60, G.Hex(0xcfe6ff) * (0.25f * b));
                     G.DiscAt(sb, c, 9, G.Hex(0xf2f8ff) * b);
                     G.DiscAt(sb, c + new Vector2(3, -2), 8, _st.Sky[1] * b);
@@ -296,9 +306,9 @@ namespace HolyPeak.Gfx
             return G.Make(w, h, data);
         }
 
-        private static Texture2D MakeForest(Style st, int seed)
+        private static Texture2D MakeForest(Style st, int seed, int density = 1)
         {
-            int w = LayerW, h = 110;
+            int w = LayerW, h = 110 + (density - 1) * 20;
             var data = new Color[w * h];
             var rng = new Rng(seed);
             float Ground(int x) => h - 26 - PFbm(x / (float)w * 6, 6, seed, 3) * 18;
@@ -309,10 +319,10 @@ namespace HolyPeak.Gfx
             for (int pass = 0; pass < 2; pass++)
             {
                 Color pc = pass == 0 ? c2 : c;
-                for (int i = 0; i < 70; i++)
+                for (int i = 0; i < 70 * density; i++)
                 {
                     int tx = rng.Range(0, w);
-                    int th = rng.Range(14, 38) - pass * 4;
+                    int th = rng.Range(14, 38 + (density - 1) * 26) - pass * 4;
                     float gy = Ground(tx) + (pass == 0 ? -4 : 2);
                     for (int y = 0; y < th; y++)
                     {

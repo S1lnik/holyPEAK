@@ -5,7 +5,7 @@ using static HolyPeak.Audio.Synth;
 namespace HolyPeak.Audio
 {
     /// <summary>Procedurally synthesized sound effects. Each returns PCM samples (mono unless noted).</summary>
-    public static class SfxGen
+    public static partial class SfxGen
     {
         public sealed class Clip
         {
@@ -17,34 +17,76 @@ namespace HolyPeak.Audio
         {
             var d = new Dictionary<string, Clip>
             {
+                // the pilgrim
                 ["jump"] = M(Jump(0)),
-                ["walljump"] = M(Jump(1)),
-                ["superjump"] = M(Jump(2)),
+                ["leap"] = M(Jump(1)),
+                ["pogo"] = M(Pogo()),
                 ["land"] = M(Land()),
-                ["dash"] = M(Dash()),
-                ["refill"] = M(Refill()),
+                ["step"] = M(Step()),
+                ["cling"] = M(Cling()),
+                ["glide"] = M(Glide()),
+                ["swing"] = M(Swing()),
+                ["hurt"] = M(Hurt()),
+                ["hazard"] = M(Hazard()),
                 ["death"] = M(Death()),
                 ["respawn"] = M(Respawn()),
-                ["spring"] = M(Spring()),
-                ["crystal"] = M(Crystal(1f)),
-                ["crystalback"] = M(Crystal(0.35f)),
-                ["ember"] = M(EmberGet()),
-                ["embersecure"] = M(EmberSecure()),
-                ["crumble"] = M(CrumbleShake()),
-                ["break"] = M(CrumbleBreak()),
-                ["restore"] = M(Restore()),
-                ["tick"] = M(Tick(1)),
-                ["tock"] = M(Tick(2)),
-                ["step"] = M(Step()),
-                ["slide"] = M(Slide()),
+                ["healstart"] = M(HealStart()),
+                ["heal"] = M(Heal()),
+                // the bell
+                ["toll"] = M(HandBell(1f)),
+                ["resonate"] = M(Resonate()),
+                ["glass"] = M(Glass()),
+                // the world
+                ["wallhit"] = M(StoneKnock()),
+                ["wallbreak"] = M(CrumbleBreak()),
+                ["secret"] = M(Secret()),
+                ["coin"] = M(Coin()),
+                ["cachehit"] = M(Crystal(0.6f)),
+                ["cachebreak"] = M(CacheBreak()),
+                ["lever"] = M(Lever()),
+                ["gate"] = M(Gate()),
+                ["item"] = M(EmberGet()),
+                ["ability"] = S(Gift()),
+                ["reclaim"] = M(EmberSecure()),
+                ["rest"] = M(Rest()),
+                ["shop"] = M(Crystal(0.4f)),
+                ["buy"] = M(Buy()),
+                ["deny"] = M(Deny()),
+                ["talk"] = M(Blip(660, 0.04f, 0.2f)),
+                ["blip"] = M(Blip(990, 0.015f, 0.18f)),
+                ["map"] = M(Paper()),
+                // creatures
+                ["hit"] = M(Hit(1f)),
+                ["kill"] = M(Kill()),
+                ["clank"] = M(Clank()),
+                ["pop"] = M(Pop()),
+                ["spit"] = M(Spit()),
+                ["fire"] = M(Fire()),
+                ["tell"] = M(Tell()),
+                ["notice"] = M(Notice()),
+                ["hop"] = M(Hop()),
+                ["thud"] = M(Land()),
+                ["lunge"] = M(Dash()),
+                // guardians
+                ["roar"] = M(Roar()),
+                ["bosshit"] = M(Hit(1.5f)),
+                ["bossdie"] = M(BossDie()),
+                ["crash"] = M(Crash(1f)),
+                ["slam"] = M(Crash(0.8f)),
+                ["crack"] = M(CrackSnd()),
+                ["quake"] = M(Quake()),
+                ["vanish"] = M(Vanish(false)),
+                ["appear"] = M(Vanish(true)),
+                ["breath"] = M(Breath()),
+                ["shieldbreak"] = M(ShieldBreak()),
+                ["shieldup"] = M(ShieldUp()),
+                ["bell"] = S(Bell()),
+                // interface and air
                 ["move"] = M(Blip(880, 0.03f, 0.25f)),
                 ["select"] = M(Select(true)),
                 ["back"] = M(Select(false)),
                 ["pause"] = M(PauseSnd()),
                 ["whoosh"] = M(Whoosh()),
-                ["gift"] = S(Gift()),
-                ["bell"] = S(Bell()),
-                ["chapter"] = S(ChapterSwell()),
                 ["wind"] = new Clip { Data = WindLoop(), Channels = 1 },
                 ["bird"] = M(Bird()),
                 ["drip"] = M(Drip()),
@@ -124,16 +166,6 @@ namespace HolyPeak.Audio
             return b;
         }
 
-        private static float[] Refill()
-        {
-            var b = Mono(0.12f);
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                b[i] = (Sine(t * 1760) * 0.5f + Sine(t * 2637) * 0.3f) * Exp(t, 0.035f) * 0.35f;
-            }
-            return b;
-        }
 
         private static float[] Death()
         {
@@ -173,19 +205,6 @@ namespace HolyPeak.Audio
             return Down(MonoToStereoWithReverb(b, 0.5f, 0.8f, 0.3f));
         }
 
-        private static float[] Spring()
-        {
-            var b = Mono(0.35f);
-            float ph = 0;
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                float freq = 170 + 420 * (1 - MathF.Exp(-t * 16)) + MathF.Sin(t * 70) * 30 * Exp(t, 0.12f);
-                ph += freq / Rate;
-                b[i] = (Sine(ph) * 0.6f + Tri(ph * 2) * 0.2f) * Exp(t, 0.11f) * MathF.Min(1, t / 0.003f) * 0.55f;
-            }
-            return b;
-        }
 
         private static float[] Crystal(float vol)
         {
@@ -244,22 +263,6 @@ namespace HolyPeak.Audio
             return Down(MonoToStereoWithReverb(b, 0.6f, 0.85f, 0.3f));
         }
 
-        private static float[] CrumbleShake()
-        {
-            var b = Mono(0.45f);
-            var n = new Noise(21);
-            var f = new OnePole();
-            var rng = new Noise(77);
-            float gate = 0;
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                if (i % 900 == 0) gate = rng.Next() > 0.1f ? 1 : 0.2f;
-                gate *= 0.9993f;
-                b[i] = f.Lp(n.Next(), 1600) * gate * 0.55f * MathF.Min(1, (0.45f - t) / 0.1f);
-            }
-            return b;
-        }
 
         private static float[] CrumbleBreak()
         {
@@ -276,29 +279,7 @@ namespace HolyPeak.Audio
             return b;
         }
 
-        private static float[] Restore()
-        {
-            var b = Mono(0.18f);
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                b[i] = Sine(t * (300 + t * 1500)) * Exp(t, 0.05f) * MathF.Min(1, t / 0.01f) * 0.25f;
-            }
-            return b;
-        }
 
-        private static float[] Tick(int which)
-        {
-            var b = Mono(0.18f);
-            float freq = which == 1 ? 1318 : 988;
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                float fm = Sine(t * freq * 2.01f) * 0.8f * Exp(t, 0.02f);
-                b[i] = Sine(t * freq + fm / Tau) * Exp(t, 0.05f) * 0.22f;
-            }
-            return b;
-        }
 
         private static float[] Step()
         {
@@ -313,19 +294,6 @@ namespace HolyPeak.Audio
             return b;
         }
 
-        private static float[] Slide()
-        {
-            var b = Mono(0.16f);
-            var n = new Noise(51);
-            var f = new Svf();
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                float env = MathF.Min(1, t / 0.02f) * MathF.Min(1, (0.16f - t) / 0.06f);
-                b[i] = f.Bp(n.Next(), 2600 + MathF.Sin(t * 90) * 500, 2f) * env * 0.35f;
-            }
-            return b;
-        }
 
         private static float[] Blip(float freq, float len, float vol)
         {
@@ -442,23 +410,6 @@ namespace HolyPeak.Audio
             return MonoToStereoWithReverb(b, 0.55f, 0.9f, 0.35f);
         }
 
-        private static float[] ChapterSwell()
-        {
-            var b = Mono(3.5f);
-            var n = new Noise(71);
-            var svf = new Svf();
-            float ph = 0;
-            for (int i = 0; i < b.Length; i++)
-            {
-                float t = i / (float)Rate;
-                float env = Adsr(t, 1.2f, 1.0f, 0.3f, 0.7f, 2.0f);
-                float wind = svf.Bp(n.Next(), 300 + 700 * env, 1.5f) * 0.25f;
-                ph += 73.4f / Rate;
-                float low = (Sine(ph) + 0.4f * Sine(ph * 1.5f) + 0.25f * Sine(ph * 2)) * 0.2f;
-                b[i] = (wind + low) * env;
-            }
-            return MonoToStereoWithReverb(b, 0.6f, 0.85f, 0.4f);
-        }
 
         private static float[] WindLoop()
         {

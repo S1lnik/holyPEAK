@@ -7,66 +7,63 @@ namespace HolyPeak.World
     {
         Empty,
         Solid,      // '#'  primary terrain
-        Solid2,     // '='  secondary terrain (bricks / ice / marble trim depending on chapter)
+        Solid2,     // '='  secondary terrain (bricks / ice / marble trim depending on region)
         Back,       // ':'  decorative background wall, not solid
-        JumpThru,   // '-'  one-way platform
-        SpikeUp,    // '^'
-        SpikeDown,  // 'v'
-        SpikeLeft,  // '<'  points left, mounted on a wall to its right
-        SpikeRight, // '>'  points right, mounted on a wall to its left
+        Platform,   // '-'  one-way platform
+        ThornUp,    // '^'
+        ThornDown,  // 'v'
+        ThornLeft,  // '<'  points left, mounted on a wall to its right
+        ThornRight, // '>'  points right, mounted on a wall to its left
+        Breakable,  // 'x'  cracked stone, broken by strikes
+        BellGlass,  // 'b'  shattered by the bell's toll
+        Resonance,  // 'r'  solid for a short while after a toll
+        Gate,       // '|'  opened by a lever
+        ArenaDoor,  // '!'  closes while a guardian is being fought
     }
 
     [Flags]
-    public enum ExitSide : byte { None = 0, Top = 1, Left = 2, Right = 4 }
+    public enum Abilities : byte { None = 0, Grips = 1, Bell = 2, Kite = 4 }
 
-    /// <summary>Static description of one screen of the mountain.</summary>
+    /// <summary>Static description of one room of the mountain, placed on the world's cell grid.</summary>
     public sealed class RoomDef
     {
         public string Id;
-        public int Chapter;
+        public int CellX, CellY, CellW = 1, CellH = 1;
+        public string Region;
         public string[] Map;
-        /// <summary>Optional tutorial text shown at the 'h' marker. Tokens {JUMP} {DASH} {MOVE} are replaced with bindings.</summary>
-        public string Hint;
-        /// <summary>Second optional tutorial text shown at the 'k' marker.</summary>
-        public string Hint2;
-        /// <summary>Horizontal wind in px/s (negative = blows left). 0 = calm.</summary>
-        public float Wind;
-        /// <summary>If &gt; 0 the wind fades in and out with this period (seconds).</summary>
-        public float WindPeriod;
-        /// <summary>Edges the player may leave through. All other edges (except the bottom pit) are invisible walls.</summary>
-        public ExitSide Exits = ExitSide.Right;
-        /// <summary>Seconds each pulse group stays solid.</summary>
-        public float PulsePhase = 1.4f;
+        public readonly Dictionary<string, string> Props = new Dictionary<string, string>();
 
         public int Cols => Map[0].Length;
         public int Rows => Map.Length;
-    }
+        public int WorldX => CellX * Atlas.CellPxW;
+        public int WorldY => CellY * Atlas.CellPxH;
 
-    public sealed class ChapterDef
-    {
-        public int Index;
-        public string Title;
-        public string Subtitle;
-        public string Epigraph;
-    }
+        public string Prop(string key, string fallback = null) => Props.TryGetValue(key, out var v) ? v : fallback;
 
-    public static class MapValidation
-    {
-        public static void Validate(IReadOnlyList<RoomDef> rooms)
+        public bool Has(char c)
         {
-            foreach (var r in rooms)
-            {
-                int w = r.Map[0].Length;
-                int spawns = 0;
-                for (int y = 0; y < r.Map.Length; y++)
-                {
-                    if (r.Map[y].Length != w)
-                        throw new InvalidOperationException($"Room {r.Id}: row {y} has length {r.Map[y].Length}, expected {w}");
-                    foreach (char c in r.Map[y]) if (c == 'P') spawns++;
-                }
-                if (spawns != 1) throw new InvalidOperationException($"Room {r.Id}: expected exactly one spawn 'P', found {spawns}");
-                if (w < 40 || r.Map.Length < 23) throw new InvalidOperationException($"Room {r.Id}: room must be at least 40x23 (is {w}x{r.Map.Length})");
-            }
+            foreach (var row in Map) if (row.IndexOf(c) >= 0) return true;
+            return false;
         }
+
+        public int Count(char c)
+        {
+            int n = 0;
+            foreach (var row in Map) foreach (char ch in row) if (ch == c) n++;
+            return n;
+        }
+
+        public override string ToString() => Id;
+    }
+
+    public sealed class RegionDef
+    {
+        public string Id;
+        public string Name;
+        public string Subtitle;
+        public int Style;          // index into Gfx.Style.Regions
+        public Audio.SongId Song;
+        public float Darkness;     // 0 = fully lit, 1 = pitch black outside of lights
+        public float Wind;         // ambient wind loop volume
     }
 }

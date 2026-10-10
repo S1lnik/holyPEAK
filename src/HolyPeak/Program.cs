@@ -24,9 +24,8 @@ namespace HolyPeak
                     case "--scene": (auto ??= new AutomationOptions()).Scene = Next(); break;
                     case "--room": (auto ??= new AutomationOptions()).Room = Next(); break;
                     case "--replay": (auto ??= new AutomationOptions()).Replay = Next(); break;
-                    case "--dash": (auto ??= new AutomationOptions()).Dash = true; break;
-                    case "--replay-all": (auto ??= new AutomationOptions()).ReplayDir = Next(); break;
-                    case "--embers": (auto ??= new AutomationOptions()).EmberRoute = true; break;
+                    case "--give": (auto ??= new AutomationOptions()).Give = Next(); break;
+                    case "--pos": (auto ??= new AutomationOptions()).Pos = Next(); break;
                     case "--keys": (auto ??= new AutomationOptions()).Keys = Next(); break;
                     case "--help":
                         Console.WriteLine("Holy Peak\n  (no arguments)   play the game\n  --render-audio <dir>   write every sound and song as WAV");

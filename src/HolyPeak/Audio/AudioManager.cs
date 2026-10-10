@@ -50,13 +50,13 @@ namespace HolyPeak.Audio
             {
                 CleanStaleCache();
                 // Each song renders its notes in parallel, so songs go one after another, title first.
-                foreach (var id in new[] { SongId.Title, SongId.Foothills, SongId.Ruins, SongId.Frost, SongId.Peak, SongId.Ending })
+                foreach (var id in new[] { SongId.Title, SongId.Village, SongId.Foothills, SongId.Boss, SongId.Ruins, SongId.Frost, SongId.Peak, SongId.Ending })
                     Render(id);
             });
         }
 
         /// <summary>Bump when any song or instrument changes so stale caches are ignored.</summary>
-        private const string CacheVersion = "v4";  // music only; sound effects are always regenerated
+        private const string CacheVersion = "v5";  // music only; sound effects are always regenerated
 
         private static string CachePath(SongId id)
             => System.IO.Path.Combine(Core.Storage.Dir, "cache", $"music-{CacheVersion}-{id}.pcm");

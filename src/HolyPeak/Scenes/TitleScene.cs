@@ -11,12 +11,12 @@ namespace HolyPeak.Scenes
     public sealed class TitleScene : Scene
     {
         private static readonly RasterizerState Scissor = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
-        private enum View { Main, Chapters, Options, Controls, Credits, ConfirmNew }
+        private enum View { Main, Options, Controls, Credits, ConfirmNew }
 
         private static Backdrop _bd;
         private float _time, _intro;
         private View _view = View.Main;
-        private Menu _main, _chapters, _confirm, _options;
+        private Menu _main, _confirm, _options;
         private readonly PlayerVisual _pv = new PlayerVisual();
         private PlayerSim _pilgrim;
         private readonly Particles _parts = new Particles(256);
@@ -31,10 +31,9 @@ namespace HolyPeak.Scenes
             AudioManager.PlayMusic(SongId.Title, 2.5f);
             AudioManager.SetWind(0.12f);
             BuildMenus();
-            _pilgrim.Spawn(new Point(52, 150), Save.HasDash);
-            _pilgrim.Facing = 1;
+            _pilgrim.Spawn(new Point(52, 150), 1);
+            _pv.HasBell = Save.Flags.Contains("ab:bell");
             _pv.Reset(_pilgrim);
-            _pv.Golden = Save.Embers.Count >= Levels.EmberCount;
             var rng = new Rng(77);
             _snow = new Vector2[120];
             _snowS = new float[_snow.Length];
@@ -45,13 +44,12 @@ namespace HolyPeak.Scenes
         {
             _main = new Menu();
             bool started = Save.Started;
-            if (started) _main.Add(Save.Completed ? "Return to the Summit" : "Continue", Continue);
+            if (started) _main.Add(Save.Completed ? "Return to the Mountain" : "Continue", Continue);
             _main.Add("New Journey", () =>
             {
                 if (Save.Started) { _view = View.ConfirmNew; _confirm.Index = 1; }
                 else NewJourney();
             });
-            _main.Add("Chapter Select", () => { _view = View.Chapters; BuildChapters(); }, () => Save.MaxChapter > 0 || Save.Completed);
             _main.Add("Options", () =>
             {
                 _view = View.Options;
@@ -67,24 +65,9 @@ namespace HolyPeak.Scenes
             _confirm.Add("No", () => _view = View.Main);
         }
 
-        private void BuildChapters()
-        {
-            _chapters = new Menu { Title = "Chapter Select", Back = () => _view = View.Main };
-            int max = Save.Completed ? 3 : Save.MaxChapter;
-            for (int c = 0; c < 4; c++)
-            {
-                int ch = c;
-                int got = 0;
-                foreach (var r in Levels.All) if (r.Chapter == c && Save.Embers.Contains(r.Id)) got++;
-                string label = c <= max ? $"{Calc.Roman(c + 1)}  {Levels.Chapters[c].Title}   {got}/{Levels.EmberCountInChapter(c)}" : $"{Calc.Roman(c + 1)}  ? ? ?";
-                _chapters.Add(label, () => StartChapter(ch), () => ch <= max);
-            }
-            _chapters.Add("Back", () => _view = View.Main, spacing: 4);
-        }
-
         private void Continue()
         {
-            Game.ChangeScene(new GameScene(Save.RoomIndex), 0.8f);
+            Game.ChangeScene(new GameScene(false), 0.8f);
         }
 
         private void NewJourney()
@@ -92,13 +75,7 @@ namespace HolyPeak.Scenes
             Game.Save = new SaveData { Started = true };
             Game.WriteSave();
             AudioManager.StopMusic(1.5f);
-            Game.ChangeScene(new GameScene(0, prologue: true), 1.0f);
-        }
-
-        private void StartChapter(int c)
-        {
-            if (c >= 1) Save.HasDash = true;
-            Game.ChangeScene(new GameScene(Levels.FirstRoomOfChapter(c)), 0.8f);
+            Game.ChangeScene(new GameScene(true), 1.0f);
         }
 
         public override void Update(float dt)
@@ -119,7 +96,6 @@ namespace HolyPeak.Scenes
             switch (_view)
             {
                 case View.Main: _main.Update(dt); break;
-                case View.Chapters: _chapters.Update(dt); break;
                 case View.ConfirmNew: _confirm.Update(dt); break;
                 case View.Options: _options.Update(dt); break;
                 case View.Controls:
@@ -205,7 +181,7 @@ namespace HolyPeak.Scenes
                 sb.End();
                 gd.ScissorRectangle = oldScissor;
                 sb.Begin(samplerState: SamplerState.PointClamp);
-                font.DrawCentered(sb, "a pilgrimage in four chapters", new Vector2(G.ViewW / 2f, ly + 34), new Color(200, 195, 225) * a, Color.Black * a);
+                font.DrawCentered(sb, "a pilgrimage up the silent mountain", new Vector2(G.ViewW / 2f, ly + 34), new Color(200, 195, 225) * a, Color.Black * a);
             }
 
             float ma = Calc.Clamp01((_intro - 0.35f) * 3f);
@@ -217,19 +193,18 @@ namespace HolyPeak.Scenes
                     _main.Draw(sb, new Vector2(G.ViewW / 2f + 50, 122), ma, accent);
                     if (Save.Started)
                     {
+                        var flags = new System.Collections.Generic.HashSet<string>(Save.Flags);
+                        var room = Save.Room != null ? Atlas.Get(Save.Room) : null;
+                        string where = room != null ? Atlas.Region(room.Region).Name : Atlas.Regions[0].Name;
                         string info = Save.Completed
-                            ? $"Summit reached · Embers {Save.Embers.Count}/{Levels.EmberCount}"
-                            : $"{Levels.Chapters[Levels.All[Math.Clamp(Save.RoomIndex, 0, Levels.All.Count - 1)].Chapter].Title} · Deaths {Save.Deaths}";
+                            ? $"The bell has rung · {Progress.Percent(flags)}% found"
+                            : $"{where} · {Progress.Percent(flags)}% found";
                         font.DrawCentered(sb, info, new Vector2(G.ViewW / 2f + 50, 164), new Color(150, 150, 180) * ma);
                     }
                     break;
                 case View.ConfirmNew:
                     Fx.Panel(sb, G.ViewW / 2f - 90 + 50, 92, 180, 58, ma, accent);
                     _confirm.Draw(sb, new Vector2(G.ViewW / 2f + 50, 122), ma, accent);
-                    break;
-                case View.Chapters:
-                    Fx.Panel(sb, 70, 30, G.ViewW - 100, 120, ma, accent);
-                    _chapters.Draw(sb, new Vector2(G.ViewW / 2f + 15, 90), ma, accent);
                     break;
                 case View.Options:
                     OptionsMenu.Draw(sb, _options, ma, accent);
@@ -242,7 +217,7 @@ namespace HolyPeak.Scenes
                     break;
             }
 
-            font.Draw(sb, "v1.0", new Vector2(G.ViewW - 20, G.ViewH - 10), new Color(120, 120, 150) * ma);
+            font.Draw(sb, "v2.0", new Vector2(G.ViewW - 20, G.ViewH - 10), new Color(120, 120, 150) * ma);
             string help = Input.Format(_view == View.Main ? "{CONFIRM} select" : "{CONFIRM} select   " + Input.BackName + " back");
             font.Draw(sb, help, new Vector2(4, G.ViewH - 10), new Color(120, 120, 150) * ma);
             sb.End();
@@ -262,7 +237,7 @@ namespace HolyPeak.Scenes
                 ("", false),
                 ("Every sprite, tile, note and sound effect", false),
                 ("is generated by code at startup.", false),
-                ("Every room is proven beatable by a solver.", false),
+                ("Every chamber is proven passable by a solver.", false),
                 ("", false),
                 ("Built with MonoGame and C#", true),
             };

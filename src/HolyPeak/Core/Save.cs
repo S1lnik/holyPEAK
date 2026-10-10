@@ -14,22 +14,31 @@ namespace HolyPeak.Core
         public bool ScreenShake { get; set; } = true;
         public bool ShowTimer { get; set; }
         public int GameSpeed { get; set; } = 10;   // tenths: 10 = 100%
-        public bool InfiniteDash { get; set; }
         public bool Invincible { get; set; }
 
-        public bool AssistActive => GameSpeed != 10 || InfiniteDash || Invincible;
+        public bool AssistActive => GameSpeed != 10 || Invincible;
     }
 
     public sealed class SaveData
     {
-        public int Version { get; set; } = 1;
+        public const int CurrentVersion = 2;
+        public int Version { get; set; } = CurrentVersion;
         public bool Started { get; set; }
-        public int RoomIndex { get; set; }
-        public bool HasDash { get; set; }
+        public string Room { get; set; }
+        public string ShrineRoom { get; set; }
+        public int MaxHp { get; set; } = 5;
+        public int MaxFlasks { get; set; } = 2;
+        public int Damage { get; set; } = 2;
+        public int Embers { get; set; }
+        public List<string> Flags { get; set; } = new List<string>();
+        public List<string> Visited { get; set; } = new List<string>();
+        public string ShadeRoom { get; set; }
+        public int ShadeX { get; set; }
+        public int ShadeY { get; set; }
+        public int ShadeEmbers { get; set; }
         public int Deaths { get; set; }
+        public int Kills { get; set; }
         public double PlayTime { get; set; }
-        public List<string> Embers { get; set; } = new List<string>();
-        public int MaxChapter { get; set; }
         public bool Completed { get; set; }
         public double FirstClearTime { get; set; }
         public int FirstClearDeaths { get; set; }
@@ -64,6 +73,7 @@ namespace HolyPeak.Core
                 string path = Path.Combine(Dir, name);
                 if (!File.Exists(path)) return new T();
                 var obj = JsonSerializer.Deserialize<T>(File.ReadAllText(path), Opts);
+                if (obj is SaveData sd && sd.Version != SaveData.CurrentVersion) return new T();   // an older game's save
                 return obj ?? new T();
             }
             catch (Exception e)

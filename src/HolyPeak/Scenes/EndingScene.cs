@@ -14,10 +14,11 @@ namespace HolyPeak.Scenes
         private static readonly string[] Epilogue =
         {
             "The bell rang out across the mountain.",
-            "Down past the frozen cliffs and the forgotten ruins,",
-            "over the foothills, into the valley below.",
+            "Down past the frozen cliffs and the sunken abbey,",
+            "through the Thornwood, into the village below.",
             "",
-            "Somewhere far away, someone looked up.",
+            "For the first time in a thousand years,",
+            "the sun came up.",
         };
 
         private Backdrop _bd;
@@ -31,7 +32,7 @@ namespace HolyPeak.Scenes
         public override void Begin()
         {
             _white = 1f;
-            _bd = new Backdrop(Style.Chapters[3], 118, 0.5f, 0.08f);
+            _bd = new Backdrop(Style.Regions[0], 118, 0.5f, 0.08f);
             AudioManager.PlayMusic(SongId.Ending, 3f);
             AudioManager.SetWind(0);
         }
@@ -112,18 +113,21 @@ namespace HolyPeak.Scenes
                 case 1:
                 {
                     float a = Calc.Clamp01(_t / 0.8f);
-                    Fx.Panel(sb, 54, 22, G.ViewW - 108, 138, a, accent);
-                    font.DrawCentered(sb, "The Summit", new Vector2(G.ViewW / 2f, 30), accent * a, Color.Black * a, 2f);
-                    Fx.Ornament(sb, new Vector2(G.ViewW / 2f, 55), 60, accent * (0.7f * a));
+                    Fx.Panel(sb, 54, 18, G.ViewW - 108, 146, a, accent);
+                    font.DrawCentered(sb, "The Bell Has Rung", new Vector2(G.ViewW / 2f, 26), accent * a, Color.Black * a, 2f);
+                    Fx.Ornament(sb, new Vector2(G.ViewW / 2f, 51), 60, accent * (0.7f * a));
                     double time = Save.FirstClearTime > 0 ? Save.FirstClearTime : Save.PlayTime;
                     int deaths = Save.FirstClearTime > 0 ? Save.FirstClearDeaths : Save.Deaths;
-                    Row(sb, "Time", Calc.FormatTime(time), 64, a);
-                    Row(sb, "Deaths", deaths.ToString(), 76, a);
-                    Row(sb, "Embers", $"{Save.Embers.Count} / {Levels.EmberCount}", 88, a);
-                    string note = Save.Embers.Count >= Levels.EmberCount
-                        ? "Every flame was carried to the top.\nYour scarf now glows gold."
-                        : (Save.Embers.Count > 0 ? "Some flames still wait on the mountain." : "The flames of the mountain wait for you.");
-                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 104), new Color(220, 210, 190) * a);
+                    var flags = new System.Collections.Generic.HashSet<string>(Save.Flags);
+                    int pct = Progress.Percent(flags);
+                    Row(sb, "Time", Calc.FormatTime(time), 60, a);
+                    Row(sb, "Deaths", deaths.ToString(), 72, a);
+                    Row(sb, "Creatures felled", Save.Kills.ToString(), 84, a);
+                    Row(sb, "Mountain found", pct + "%", 96, a);
+                    string note = pct >= 100
+                        ? "Nothing on the mountain is hidden from you now."
+                        : (pct >= 75 ? "A few secrets still sleep on the mountain." : "Much of the mountain is still waiting for you.");
+                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 112), new Color(220, 210, 190) * a);
                     if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 128), new Color(150, 150, 170) * a);
                     if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 142), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
                     break;
@@ -132,7 +136,7 @@ namespace HolyPeak.Scenes
                 {
                     string[] credits =
                     {
-                        "HOLY PEAK", "", "A pilgrimage in four chapters", "", "",
+                        "HOLY PEAK", "", "A pilgrimage up the silent mountain", "", "",
                         "Design & Programming", "Claude", "",
                         "Pixel Art, Music & Sound", "Generated entirely in code", "",
                         "Built with", "MonoGame", "", "", "Thank you for climbing.",
@@ -158,9 +162,9 @@ namespace HolyPeak.Scenes
         private static void Row(SpriteBatch sb, string label, string value, float y, float a)
         {
             var font = G.Font;
-            font.Draw(sb, label, new Vector2(96, y), new Color(170, 165, 200) * a);
+            font.Draw(sb, label, new Vector2(80, y), new Color(170, 165, 200) * a);
             float w = font.Measure(value);
-            font.Draw(sb, value, new Vector2(G.ViewW - 96 - w, y), Color.White * a);
+            font.Draw(sb, value, new Vector2(G.ViewW - 80 - w, y), Color.White * a);
         }
     }
 }

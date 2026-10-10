@@ -4,7 +4,7 @@ using static HolyPeak.Audio.Synth;
 
 namespace HolyPeak.Audio
 {
-    public enum SongId { Title, Foothills, Ruins, Frost, Peak, Ending }
+    public enum SongId { Title, Foothills, Ruins, Frost, Peak, Ending, Village, Boss }
 
     public enum Inst
     {

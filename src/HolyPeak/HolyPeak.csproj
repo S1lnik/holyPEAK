@@ -20,7 +20,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Icon.ico" LogicalName="Icon.ico" />
     <EmbeddedResource Include="Icon.bmp" LogicalName="Icon.bmp" />
-    <EmbeddedResource Include="World/levels.txt" LogicalName="levels.txt" />
+    <EmbeddedResource Include="World/world.txt" LogicalName="world.txt" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,8 +13,23 @@ namespace HolyPeak.Gfx
     /// </summary>
     public static class TileArt
     {
-        public static void Build(Room room, Style st, out Texture2D front, out Texture2D back)
-            => Build(room, st, out front, out back, out _);
+        /// <summary>Terrain as the art sees it: real terrain plus cracked stone that has not been broken yet.</summary>
+        public static bool ArtSolid(Room room, int tx, int ty)
+        {
+            if (tx < 0 || ty < 0 || tx >= room.Cols || ty >= room.Rows) return true;
+            var t = room.TileAt(tx, ty);
+            if (Room.IsSolidTile(t)) return true;
+            return t == Tile.Breakable && !room.Groups[room.GroupOf[ty * room.Cols + tx]].Gone;
+        }
+
+        public static int Seed(Room room) => StableHash(room.Def.Id) & 0xFFFF;
+
+        public static int StableHash(string s)
+        {
+            int h = 17;
+            foreach (char c in s) h = h * 31 + c;
+            return h & 0x7FFFFFFF;
+        }
 
         public static void Build(Room room, Style st, out Texture2D front, out Texture2D back, out List<Vector2> lights)
         {
@@ -22,13 +37,11 @@ namespace HolyPeak.Gfx
             int cols = room.Cols, rows = room.Rows, W = room.Width, H = room.Height;
             var fp = new Color[W * H];
             var bp = new Color[W * H];
-            int seed = room.Def.Id.GetHashCode() & 0xFFFF;
+            int seed = Seed(room);
 
-            bool Solid(int tx, int ty) =>
-                tx < 0 || ty < 0 || tx >= cols || ty >= rows || Room.IsSolidTile(room.TileAt(tx, ty));
+            bool Solid(int tx, int ty) => ArtSolid(room, tx, ty);
             Tile T(int tx, int ty) => room.TileAt(tx, ty);
-            char Ch(int tx, int ty) => tx < 0 || ty < 0 || tx >= cols || ty >= rows ? '#' : room.Def.Map[ty][tx];
-            bool Clean(int tx, int ty) { char c = Ch(tx, ty); return c == '.' || c == 'P' || c == 'h' || c == 'k' || c == ':'; }
+            bool Clean(int tx, int ty) { var t = T(tx, ty); return (t == Tile.Empty || t == Tile.Back) && !room.Updraft[Math.Clamp(ty, 0, rows - 1) * cols + Math.Clamp(tx, 0, cols - 1)]; }
 
             // Pixel-level distance from open air (Chebyshev), for smooth interior shading.
             var pdist = new byte[W * H];
@@ -122,7 +135,7 @@ namespace HolyPeak.Gfx
 
                             Color c = alt ? AltPixel(st, x, y, seed) : TerrainPixel(st, x, y, seed);
                             float pd = pdist[y * W + x] == 255 ? 40 : pdist[y * W + x];
-                            float shade = 1f - (st.Id == 3 ? 0.34f : 0.3f) * Calc.SmoothStep((pd - 3f) / (st.Id == 3 ? 18f : 26f));
+                            float shade = 1f - (st.Look == 3 ? 0.34f : 0.3f) * Calc.SmoothStep((pd - 3f) / (st.Look == 3 ? 18f : 26f));
                             if (d == 1 && (up || ul || ur)) c = G.Mix(c, alt ? st.AltLight : st.Light, 0.55f);
                             if (dn && 7 - ly <= 1) c = G.Mul(c, 0.8f);
                             c = G.Mul(c, shade);
@@ -131,7 +144,7 @@ namespace HolyPeak.Gfx
                         }
 
                     // top cap (grass / moss / snow / gold)
-                    if (up && (!alt || st.Id == 2 || st.Id == 3))
+                    if (up && (!alt || st.Look == 2 || st.Look == 3))
                         for (int lx = 0; lx < 8; lx++)
                         {
                             int x = tx * 8 + lx;
@@ -142,12 +155,12 @@ namespace HolyPeak.Gfx
                             {
                                 int y = ty * 8 + ly;
                                 Color c = ly == 0 ? st.CapLight : (ly == thick - 1 ? st.CapDark : st.Cap);
-                                if (st.Id == 0 && ly == 0 && Calc.Hash(x, y, seed + 3) < 0.3f) c = st.Cap;
+                                if (st.Look == 0 && ly == 0 && Calc.Hash(x, y, seed + 3) < 0.3f) c = st.Cap;
                                 SetF(x, y, c);
                             }
                             // dark line under the cap
                             int yy = ty * 8 + thick;
-                            if (thick < 7 && (st.Id == 0 || st.Id == 1)) SetF(x, yy, G.Mix(GetF(x, yy), st.Outline, 0.5f));
+                            if (thick < 7 && (st.Look == 0 || st.Look == 1)) SetF(x, yy, G.Mix(GetF(x, yy), st.Outline, 0.5f));
                             // cap spilling over edges
                             if (lf && lx == 0) { for (int k = 1; k < thick + 1; k++) SetF(x, ty * 8 + k, st.CapDark); }
                             if (rt && lx == 7) { for (int k = 1; k < thick + 1; k++) SetF(x, ty * 8 + k, st.CapDark); }
@@ -158,9 +171,9 @@ namespace HolyPeak.Gfx
             for (int ty = 0; ty < rows; ty++)
                 for (int tx = 0; tx < cols; tx++)
                 {
-                    if (T(tx, ty) != Tile.JumpThru) continue;
-                    bool lEnd = T(tx - 1, ty) != Tile.JumpThru && !Solid(tx - 1, ty);
-                    bool rEnd = T(tx + 1, ty) != Tile.JumpThru && !Solid(tx + 1, ty);
+                    if (T(tx, ty) != Tile.Platform) continue;
+                    bool lEnd = T(tx - 1, ty) != Tile.Platform && !Solid(tx - 1, ty);
+                    bool rEnd = T(tx + 1, ty) != Tile.Platform && !Solid(tx + 1, ty);
                     for (int lx = 0; lx < 8; lx++)
                     {
                         int x = tx * 8 + lx, y = ty * 8;
@@ -190,7 +203,7 @@ namespace HolyPeak.Gfx
                 for (int tx = 0; tx < cols; tx++)
                 {
                     Tile t = T(tx, ty);
-                    if (t < Tile.SpikeUp) continue;
+                    if (!Room.IsThorn(t)) continue;
                     // pass 0: outline, pass 1: fill
                     for (int pass = 0; pass < 2; pass++)
                         for (int sp = 0; sp < 2; sp++)
@@ -211,9 +224,9 @@ namespace HolyPeak.Gfx
                                     int lx, ly;
                                     switch (t)
                                     {
-                                        case Tile.SpikeUp: lx = along; ly = 2 + r; break;
-                                        case Tile.SpikeDown: lx = along; ly = 5 - r; break;
-                                        case Tile.SpikeLeft: lx = 2 + r; ly = along; break;
+                                        case Tile.ThornUp: lx = along; ly = 2 + r; break;
+                                        case Tile.ThornDown: lx = along; ly = 5 - r; break;
+                                        case Tile.ThornLeft: lx = 2 + r; ly = along; break;
                                         default: lx = 5 - r; ly = along; break;
                                     }
                                     SetF(tx * 8 + lx, ty * 8 + ly, c);
@@ -222,9 +235,9 @@ namespace HolyPeak.Gfx
                                         // cap the tip
                                         switch (t)
                                         {
-                                            case Tile.SpikeUp: SetF(tx * 8 + lx, ty * 8 + ly - 1, st.Outline); break;
-                                            case Tile.SpikeDown: SetF(tx * 8 + lx, ty * 8 + ly + 1, st.Outline); break;
-                                            case Tile.SpikeLeft: SetF(tx * 8 + lx - 1, ty * 8 + ly, st.Outline); break;
+                                            case Tile.ThornUp: SetF(tx * 8 + lx, ty * 8 + ly - 1, st.Outline); break;
+                                            case Tile.ThornDown: SetF(tx * 8 + lx, ty * 8 + ly + 1, st.Outline); break;
+                                            case Tile.ThornLeft: SetF(tx * 8 + lx - 1, ty * 8 + ly, st.Outline); break;
                                             default: SetF(tx * 8 + lx + 1, ty * 8 + ly, st.Outline); break;
                                         }
                                     }
@@ -291,9 +304,22 @@ namespace HolyPeak.Gfx
                     int kind = (int)(Calc.Hash(tx, ty, seed + 102) * 3);
                     switch (st.Id)
                     {
-                        case 0: if (kind < 2) Pine(Px, gx, gy, 12 + (int)(h * 40), st); else Bush(Px, gx, gy, st); break;
-                        case 1: if (kind == 0) Urn(Px, gx, gy, st); else Column(Px, gx, gy, 10 + (int)(h * 50), st); break;
-                        case 2: if (kind < 2) DeadTree(Px, gx, gy, 10 + (int)(h * 40), st); else IceCluster(Px, gx, gy, st); break;
+                        case 0:
+                            if (kind == 0) Pine(Px, gx, gy, 12 + (int)(h * 40), st);
+                            else if (kind == 1) { Lantern(Px, gx, gy, st); lights.Add(new Vector2(gx, gy - 9)); }
+                            else Bush(Px, gx, gy, st);
+                            break;
+                        case 1:
+                            if (kind == 0) GnarledTree(Px, gx, gy, 16 + (int)(h * 60), st, seed + tx);
+                            else if (kind == 1) Bramble(Px, gx, gy, st, seed + tx);
+                            else { Mushrooms(Px, gx, gy, st, seed + tx); lights.Add(new Vector2(gx, gy - 4)); }
+                            break;
+                        case 2:
+                            if (kind == 0) { Urn(Px, gx, gy, st); }
+                            else if (kind == 1) { Candles(Px, gx, gy, st); lights.Add(new Vector2(gx, gy - 6)); }
+                            else Column(Px, gx, gy, 10 + (int)(h * 50), st);
+                            break;
+                        case 3: if (kind < 2) DeadTree(Px, gx, gy, 10 + (int)(h * 40), st); else IceCluster(Px, gx, gy, st); break;
                         default: Lantern(Px, gx, gy, st); lights.Add(new Vector2(gx, gy - 9)); break;
                     }
                 }
@@ -411,24 +437,142 @@ namespace HolyPeak.Gfx
             px(gx, gy - 14, roof);
         }
 
+        private static void GnarledTree(Action<int, int, Color> px, int gx, int gy, int height, Style st, int seed)
+        {
+            Color bark = G.Mix(st.Silhouette, st.Dark, 0.55f), barkL = G.Mix(bark, st.Light, 0.3f), leaf = G.Mix(st.Silhouette, st.CapDark, 0.45f);
+            height = Math.Min(height, 70);
+            float x = gx;
+            for (int y = 0; y < height; y++)
+            {
+                int w = Math.Max(1, (int)(3 - y / (float)height * 2.2f));
+                if (y < 3) w += 3 - y;
+                for (int k = -w; k <= w; k++) px((int)x + k, gy - 1 - y, k == -w ? barkL : bark);
+                x += MathF.Sin(y * 0.21f + seed) * 0.35f;
+                if (y > height / 3 && Calc.Hash(seed, y) > 0.86f)
+                {
+                    int dir = Calc.Hash(seed + 1, y) > 0.5f ? 1 : -1;
+                    int len = 4 + (int)(Calc.Hash(seed + 2, y) * 8);
+                    for (int k = 1; k <= len; k++) px((int)x + dir * k, gy - 1 - y - k / 3, bark);
+                    for (int dy = -2; dy <= 1; dy++)
+                        for (int dx = -3; dx <= 3; dx++)
+                            if (Calc.Hash((int)x + dir * len + dx, gy - y + dy, seed) > 0.35f) px((int)x + dir * len + dx, gy - 2 - y - len / 3 + dy, leaf);
+                }
+            }
+            // canopy
+            int top = gy - height;
+            for (int dy = -8; dy <= 3; dy++)
+                for (int dx = -10; dx <= 10; dx++)
+                {
+                    float d = dx * dx / 100f + dy * dy / 40f;
+                    if (d > 1 || Calc.Hash((int)x + dx, top + dy, seed + 5) > 0.85f - d * 0.3f) continue;
+                    px((int)x + dx, top + dy, leaf);
+                }
+            // roots
+            for (int k = 2; k < 6; k++) { px(gx - 3 - k, gy - 1, bark); px(gx + 3 + k / 2, gy - 1, bark); }
+        }
+
+        private static void Bramble(Action<int, int, Color> px, int gx, int gy, Style st, int seed)
+        {
+            Color vine = G.Mix(st.SpikeDark, st.Silhouette, 0.3f), thorn = st.Spike;
+            for (int v = 0; v < 4; v++)
+            {
+                float a = -MathF.PI / 2 + (v - 1.5f) * 0.5f;
+                float x = gx, y = gy - 1;
+                for (int k = 0; k < 14; k++)
+                {
+                    a += MathF.Sin(k * 0.8f + v + seed) * 0.35f;
+                    x += MathF.Cos(a); y += MathF.Sin(a) * 0.8f;
+                    px((int)x, (int)y, vine);
+                    if (k % 4 == 3) px((int)x + (v % 2 == 0 ? 1 : -1), (int)y, thorn);
+                }
+            }
+        }
+
+        private static void Mushrooms(Action<int, int, Color> px, int gx, int gy, Style st, int seed)
+        {
+            Color stem = G.Hex(0xd8d0c0), capC = st.Accent2, capL = G.Mix(st.Accent2, Color.White, 0.4f), dot = st.Accent1;
+            for (int m = 0; m < 3; m++)
+            {
+                int mx = gx - 4 + m * 4, h = 2 + (int)(Calc.Hash(seed, m) * 4), r = 1 + (m == 1 ? 1 : 0);
+                for (int y = 0; y < h; y++) px(mx, gy - 1 - y, stem);
+                for (int dx = -r - 1; dx <= r + 1; dx++) px(mx + dx, gy - 1 - h, dx < 0 ? capL : capC);
+                for (int dx = -r; dx <= r; dx++) px(mx + dx, gy - 2 - h, capC);
+                px(mx, gy - 2 - h, dot);
+            }
+        }
+
+        private static void Candles(Action<int, int, Color> px, int gx, int gy, Style st)
+        {
+            Color wax = G.Hex(0xf0e2c0), waxD = G.Hex(0xc0a888), flame = G.Hex(0xffd070), core = G.Hex(0xfff6d8);
+            int[] hs = { 5, 8, 4 };
+            for (int i = 0; i < 3; i++)
+            {
+                int cx = gx - 3 + i * 3;
+                for (int y = 0; y < hs[i]; y++) { px(cx, gy - 1 - y, wax); px(cx + 1, gy - 1 - y, waxD); }
+                px(cx, gy - 1 - hs[i], flame); px(cx, gy - 2 - hs[i], core);
+            }
+            for (int x = -4; x <= 5; x++) px(gx + x, gy - 1, waxD);
+        }
+
+        // ---- dynamic tiles ---------------------------------------------------------------
+
+        /// <summary>Cracked stone for a breakable group, drawn in the terrain's own pattern so it blends in.</summary>
+        public static Texture2D BuildBreakable(Room room, Style st, in TileGroup g)
+        {
+            var r = g.Rect;
+            var data = new Color[r.Width * r.Height];
+            int seed = Seed(room);
+            int gi = g.Index;
+            for (int y = 0; y < r.Height; y++)
+                for (int x = 0; x < r.Width; x++)
+                {
+                    int wx = r.X + x, wy = r.Y + y;
+                    int tx = wx >> 3, ty = wy >> 3;
+                    if (room.GroupOf[ty * room.Cols + tx] != gi) continue;
+                    Color c = G.Mul(TerrainPixel(st, wx, wy, seed), 0.86f);
+                    // edges that face open air get the usual outline
+                    bool open(int dx, int dy) { int nx = tx + dx, ny = ty + dy; return !ArtSolid(room, nx, ny); }
+                    int lx = wx & 7, ly = wy & 7;
+                    if ((ly == 0 && open(0, -1)) || (ly == 7 && open(0, 1)) || (lx == 0 && open(-1, 0)) || (lx == 7 && open(1, 0))) c = st.Outline;
+                    data[y * r.Width + x] = c;
+                }
+            // a web of cracks: random walks from a few seeds
+            var rng = new Rng(seed + gi * 7 + 3);
+            int n = 2 + r.Width * r.Height / 120;
+            for (int i = 0; i < n; i++)
+            {
+                float x = rng.Range(2, r.Width - 2), y = rng.Range(2, r.Height - 2);
+                float a = rng.Range(0, MathF.PI * 2);
+                int len = rng.Range(5, 12);
+                for (int k = 0; k < len; k++)
+                {
+                    int ix = (int)x, iy = (int)y;
+                    if (ix < 0 || iy < 0 || ix >= r.Width || iy >= r.Height) break;
+                    int idx = iy * r.Width + ix;
+                    if (data[idx].A > 0) data[idx] = G.Mix(st.Outline, st.Dark, 0.3f);
+                    if (ix + 1 < r.Width && data[idx + 1].A > 0 && k % 2 == 0) data[idx + 1] = G.Mix(data[idx + 1], st.Light, 0.35f);
+                    a += rng.Range(-0.6f, 0.6f);
+                    x += MathF.Cos(a); y += MathF.Sin(a);
+                }
+            }
+            return G.Make(r.Width, r.Height, data);
+        }
+
         private static bool IsBackish(Room room, int tx, int ty)
         {
             if (tx < 0 || ty < 0 || tx >= room.Cols || ty >= room.Rows) return true;
             var t = room.TileAt(tx, ty);
-            return t == Tile.Back || Room.IsSolidTile(t) || BackFill(room, tx, ty);
+            return t == Tile.Back || ArtSolid(room, tx, ty) || BackFill(room, tx, ty);
         }
 
-        /// <summary>Entity cells (springs, crystals...) inside a background wall keep the wall behind them.</summary>
+        /// <summary>Object cells (shrines, creatures...) inside a background wall keep the wall behind them.</summary>
         private static bool BackFill(Room room, int tx, int ty)
         {
             if (tx < 0 || ty < 0 || tx >= room.Cols || ty >= room.Rows) return false;
             char c = room.Def.Map[ty][tx];
-            if (c == '.' || c == ':' || Room.IsSolidTile(room.TileAt(tx, ty))) return false;
-            int n = 0;
-            if (room.TileAt(tx - 1, ty) == Tile.Back || Room.IsSolidTile(room.TileAt(tx - 1, ty))) n++;
-            if (room.TileAt(tx + 1, ty) == Tile.Back || Room.IsSolidTile(room.TileAt(tx + 1, ty))) n++;
-            if (room.TileAt(tx, ty - 1) == Tile.Back || Room.IsSolidTile(room.TileAt(tx, ty - 1))) n++;
-            if (room.TileAt(tx, ty + 1) == Tile.Back || Room.IsSolidTile(room.TileAt(tx, ty + 1))) n++;
+            if (c == '.' || c == ':' || c == 'u' || room.TileAt(tx, ty) != Tile.Empty) return false;
+            bool B(int x, int y) => room.TileAt(x, y) == Tile.Back || ArtSolid(room, x, y);
+            int n = (B(tx - 1, ty) ? 1 : 0) + (B(tx + 1, ty) ? 1 : 0) + (B(tx, ty - 1) ? 1 : 0) + (B(tx, ty + 1) ? 1 : 0);
             return n >= 3 && (room.TileAt(tx - 1, ty) == Tile.Back || room.TileAt(tx + 1, ty) == Tile.Back ||
                               room.TileAt(tx, ty - 1) == Tile.Back || room.TileAt(tx, ty + 1) == Tile.Back);
         }
@@ -436,7 +580,7 @@ namespace HolyPeak.Gfx
         private static int CapThickness(Style st, int x, int seed)
         {
             float h = Calc.Hash(x, 77, seed);
-            return st.Id switch
+            return st.Look switch
             {
                 0 => h < 0.25f ? 2 : (h < 0.8f ? 3 : 4),
                 1 => h < 0.5f ? 1 : (h < 0.85f ? 2 : 3),
@@ -449,7 +593,7 @@ namespace HolyPeak.Gfx
 
         private static Color TerrainPixel(Style st, int x, int y, int seed)
         {
-            switch (st.Id)
+            switch (st.Look)
             {
                 case 0:
                 {
@@ -506,12 +650,12 @@ namespace HolyPeak.Gfx
 
         private static Color AltPixel(Style st, int x, int y, int seed)
         {
-            switch (st.Id)
+            switch (st.Look)
             {
                 case 0:
                 case 1:
                 {
-                    int bh = st.Id == 0 ? 6 : 4, bw = 8;
+                    int bh = st.Look == 0 ? 6 : 4, bw = 8;
                     int row = Floor(y, bh);
                     int ox = (row & 1) * (bw / 2);
                     int col = Floor(x + ox, bw);
@@ -544,7 +688,7 @@ namespace HolyPeak.Gfx
 
         private static Color BackPixel(Style st, int x, int y, int seed)
         {
-            switch (st.Id)
+            switch (st.Look)
             {
                 case 1:
                 {
@@ -578,7 +722,7 @@ namespace HolyPeak.Gfx
         {
             int bx = tx * 8, by = ty * 8;
             float h = Calc.Hash(tx, ty, seed + 31);
-            switch (st.Id)
+            switch (st.Look)
             {
                 case 0:
                     // grass blades
@@ -654,7 +798,7 @@ namespace HolyPeak.Gfx
             for (int lx = 1; lx < 7; lx++)
             {
                 float h = Calc.Hash(bx + lx, by, seed + 50);
-                switch (st.Id)
+                switch (st.Look)
                 {
                     case 0:
                         if (h > 0.86f)

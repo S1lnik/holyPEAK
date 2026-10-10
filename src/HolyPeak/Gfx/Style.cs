@@ -2,10 +2,12 @@ using Microsoft.Xna.Framework;
 
 namespace HolyPeak.Gfx
 {
-    /// <summary>Colour script for one chapter (and the title screen).</summary>
+    /// <summary>Colour script for one region of the mountain (and the title screen).</summary>
     public sealed class Style
     {
         public int Id;
+        /// <summary>Terrain pattern: 0 earth, 1 rubble and bricks, 2 ice, 3 marble.</summary>
+        public int Look;
         public Color[] Sky;             // top -> horizon gradient stops
         public Color PeakFar, PeakNear, PeakGlow;
         public Color MountFar, MountMid, MountNear;
@@ -20,17 +22,19 @@ namespace HolyPeak.Gfx
         public Color Spike, SpikeDark, SpikeLight;
         public Color Accent1, Accent2;           // flowers / decorations
         public Color Ambient;                    // particle tint
-        public Color Light2;                     // global tint for hint text etc.
-        public bool Stars, Snow, Fireflies, Motes, Dust, Clouds;
+        public Color Light2;                     // text and highlights
+        public Color Shadow;                     // colour of darkness in the lighting pass
+        public Color Fog;                        // low mist drifting through rooms
+        public bool Stars, Snow, Fireflies, Motes, Dust, Clouds, Spores;
 
-        public static readonly Style[] Chapters = { Foothills(), Ruins(), Frost(), Peak() };
+        public static readonly Style[] Regions = { Village(), Thornwood(), Abbey(), Frost(), Summit() };
         public static readonly Style Title = TitleStyle();
 
         private static Color H(uint c) => G.Hex(c);
 
-        private static Style Foothills() => new Style
+        private static Style Village() => new Style
         {
-            Id = 0,
+            Id = 0, Look = 0,
             Sky = new[] { H(0x223361), H(0x4a4f8c), H(0x9a6d9e), H(0xf09a7f), H(0xffd29a) },
             PeakFar = H(0x7d78a8), PeakNear = H(0x655f92), PeakGlow = H(0xfff1c4),
             MountFar = H(0x8a7aa6), MountMid = H(0x60608f), MountNear = H(0x3e4670),
@@ -43,12 +47,32 @@ namespace HolyPeak.Gfx
             Spike = H(0xb9bccb), SpikeDark = H(0x5f6276), SpikeLight = H(0xf2f4ff),
             Accent1 = H(0xffe066), Accent2 = H(0xff7aa8),
             Ambient = H(0xfff2a0), Light2 = H(0xfff4e0),
+            Shadow = H(0x2a2a52), Fog = H(0xffd8c0),
             Fireflies = true,
         };
 
-        private static Style Ruins() => new Style
+        private static Style Thornwood() => new Style
         {
-            Id = 1,
+            Id = 1, Look = 0,
+            Sky = new[] { H(0x0e1426), H(0x1c2a3e), H(0x2f4a4a), H(0x5c7a56), H(0xb0b87a) },
+            PeakFar = H(0x52687a), PeakNear = H(0x435868), PeakGlow = H(0xe6ffd0),
+            MountFar = H(0x3d5a5a), MountMid = H(0x2c4446), MountNear = H(0x1e3134),
+            Silhouette = H(0x0f1d1e), Haze = H(0x8fb08a),
+            Outline = H(0x0c0d0a), Dark = H(0x231a16), Base = H(0x392a20), Light = H(0x52402e), Speck = H(0x6b5a40),
+            Alt = H(0x4e5a52), AltDark = H(0x323a35), AltLight = H(0x6f7d72),
+            Cap = H(0x3f7a3a), CapDark = H(0x285228), CapLight = H(0x74b252),
+            Back = H(0x1f2a24), BackDark = H(0x141c18), BackLight = H(0x2c3a32),
+            Plat = H(0x6b5236), PlatDark = H(0x40301e), PlatLight = H(0x957552),
+            Spike = H(0x8a5a6a), SpikeDark = H(0x48283a), SpikeLight = H(0xd2a0b0),
+            Accent1 = H(0xd8ff7a), Accent2 = H(0xc77dff),
+            Ambient = H(0xd8ffa0), Light2 = H(0xeaf4e0),
+            Shadow = H(0x0b1a1c), Fog = H(0x9fc8a0),
+            Fireflies = true, Spores = true,
+        };
+
+        private static Style Abbey() => new Style
+        {
+            Id = 2, Look = 1,
             Sky = new[] { H(0x1a1735), H(0x3a2a58), H(0x7a3f6e), H(0xc7637a), H(0xf2a25e) },
             PeakFar = H(0x6a4f7e), PeakNear = H(0x553f6c), PeakGlow = H(0xffd9a0),
             MountFar = H(0x6d4a72), MountMid = H(0x4c3560), MountNear = H(0x33264a),
@@ -61,12 +85,13 @@ namespace HolyPeak.Gfx
             Spike = H(0xc2b3a0), SpikeDark = H(0x6d5d50), SpikeLight = H(0xfff0d8),
             Accent1 = H(0xffb14e), Accent2 = H(0xc77dff),
             Ambient = H(0xffd7a0), Light2 = H(0xffe8d0),
+            Shadow = H(0x1c1028), Fog = H(0xe0a090),
             Dust = true,
         };
 
         private static Style Frost() => new Style
         {
-            Id = 2,
+            Id = 3, Look = 2,
             Sky = new[] { H(0x0b1430), H(0x172c55), H(0x2e5486), H(0x5d8cb8), H(0xa9d0e8) },
             PeakFar = H(0x8fb0d4), PeakNear = H(0x6f93bd), PeakGlow = H(0xe8f6ff),
             MountFar = H(0x5d80ad), MountMid = H(0x3f5f8c), MountNear = H(0x2a4269),
@@ -79,12 +104,13 @@ namespace HolyPeak.Gfx
             Spike = H(0xbfe9ff), SpikeDark = H(0x5a9fca), SpikeLight = H(0xffffff),
             Accent1 = H(0xbff0ff), Accent2 = H(0x8ad6ff),
             Ambient = H(0xffffff), Light2 = H(0xe8f6ff),
+            Shadow = H(0x0e1838), Fog = H(0xd0e8ff),
             Snow = true, Stars = true,
         };
 
-        private static Style Peak() => new Style
+        private static Style Summit() => new Style
         {
-            Id = 3,
+            Id = 4, Look = 3,
             Sky = new[] { H(0x07081c), H(0x171842), H(0x33296a), H(0x6a4a8e), H(0xd6a0b0) },
             PeakFar = H(0xcfc4e8), PeakNear = H(0xa99cc9), PeakGlow = H(0xffe9a8),
             MountFar = H(0x5a4c8a), MountMid = H(0x433a72), MountNear = H(0x2f2a58),
@@ -97,13 +123,14 @@ namespace HolyPeak.Gfx
             Spike = H(0xffe7a8), SpikeDark = H(0xc08a2e), SpikeLight = H(0xffffff),
             Accent1 = H(0xffd166), Accent2 = H(0xb69cff),
             Ambient = H(0xffe9a8), Light2 = H(0xfff6e0),
+            Shadow = H(0x1e1840), Fog = H(0xf0e0ff),
             Stars = true, Motes = true, Clouds = true,
         };
 
         private static Style TitleStyle()
         {
             var s = Frost();
-            s.Id = 4;
+            s.Id = 5;
             s.Sky = new[] { G.Hex(0x060716), G.Hex(0x111538), G.Hex(0x232a5c), G.Hex(0x4a4a86), G.Hex(0x9b86b8) };
             s.PeakFar = G.Hex(0xb9b3dc); s.PeakNear = G.Hex(0x8f88bd); s.PeakGlow = G.Hex(0xffe6a0);
             s.MountFar = G.Hex(0x40457a); s.MountMid = G.Hex(0x2d3263); s.MountNear = G.Hex(0x1c2147);

@@ -15,6 +15,11 @@ namespace HolyPeak.Scenes
         /// <summary>Fractional camera offset in [0,1) used to smooth scrolling of the low-res world layer.</summary>
         public Vector2 SubPixel { get; protected set; }
 
+        /// <summary>Scenes with darkness draw their lights into <see cref="HolyPeakGame.LightTarget"/> before the world.</summary>
+        public virtual bool UsesLight => false;
+        public virtual Color LightAmbient => Color.White;
+        public virtual void DrawLight(SpriteBatch sb) { }
+
         public virtual void Begin() { }
         public virtual void End() { }
         public virtual void OnQuit() { }
@@ -87,13 +92,14 @@ namespace HolyPeak.Scenes
             {
                 Input.Confirm.Consume();
                 Input.Jump.Consume();
+                Input.Strike.Consume();
                 AudioManager.Play("select", 0.8f);
                 it.Confirm?.Invoke();
             }
             else if (Input.Back.Pressed && Back != null)
             {
                 Input.Back.Consume();
-                Input.Dash.Consume();
+                Input.Strike.Consume();
                 AudioManager.Play("back", 0.8f);
                 Back();
             }

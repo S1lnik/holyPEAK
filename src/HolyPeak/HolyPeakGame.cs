@@ -17,11 +17,10 @@ namespace HolyPeak
         public int Every;                // also capture every N frames (numbered files)
         public string Scene = "title";   // title | game | ending | prologue
         public string Room;              // room id for the game scene
+        public string Pos;               // tile position "x,y" to place the pilgrim in that room
         public string Replay;            // input replay file for the game scene
-        public bool Dash;                // grant dash ability
-        public string ReplayDir;         // play every room in order using the solver's replays
-        public bool EmberRoute;          // prefer the ember-collecting replays
-        public string Keys;              // scripted menu presses: "frame:Button,frame:Button"
+        public string Give;              // flags to grant, e.g. "grips,bell,kite,boss:thornback"
+        public string Keys;              // scripted presses: "frame:Button,frame:Button"
     }
 
     public sealed class HolyPeakGame : Game
@@ -35,7 +34,10 @@ namespace HolyPeak
         public readonly bool AutoAudio;
 
         private SpriteBatch _sb;
-        private RenderTarget2D _worldRt, _uiRt, _captureRt;
+        private RenderTarget2D _worldRt, _uiRt, _captureRt, _lightRt;
+
+        /// <summary>The light map the current scene drew this frame (same size and space as the world target).</summary>
+        public RenderTarget2D LightTarget => _lightRt;
         private Scene _scene, _next;
         private float _fade = 1f;       // 1 = black
         private float _fadeSpeed = 2.5f;
@@ -100,6 +102,7 @@ namespace HolyPeak
             G.Init(GraphicsDevice);
             Sprites.Init();
             _worldRt = new RenderTarget2D(GraphicsDevice, G.ViewW + 2, G.ViewH + 2);
+            _lightRt = new RenderTarget2D(GraphicsDevice, G.ViewW + 2, G.ViewH + 2);
             _uiRt = new RenderTarget2D(GraphicsDevice, G.ViewW, G.ViewH);
             if (Auto == null || AutoAudio) AudioManager.Init();
             ApplyAudioSettings();
@@ -112,7 +115,7 @@ namespace HolyPeak
                 {
                     "game" => GameScene.ForAutomation(Auto),
                     "ending" => new EndingScene(),
-                    "prologue" => new GameScene(0, prologue: true),
+                    "prologue" => GameScene.ForAutomation(Auto),
                     _ => new TitleScene(),
                 };
                 _fade = 0;
@@ -229,6 +232,14 @@ namespace HolyPeak
         protected override void Draw(GameTime gameTime)
         {
             var gd = GraphicsDevice;
+
+            // 0) light map for scenes with darkness
+            if (_scene != null && _scene.UsesLight)
+            {
+                gd.SetRenderTarget(_lightRt);
+                gd.Clear(_scene.LightAmbient);
+                _scene.DrawLight(_sb);
+            }
 
             // 1) world at native resolution (+1px margin for sub-pixel camera smoothing)
             gd.SetRenderTarget(_worldRt);

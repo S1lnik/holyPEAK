@@ -16,6 +16,7 @@ namespace HolyPeak.Gfx
         public static Texture2D GlowSmall;  // 16x16
         public static Texture2D Disc;       // 16x16 hard disc
         public static Texture2D Ring;       // 32x32 ring
+        public static Texture2D Soft;       // 64x64 smooth falloff used for lights
         public static Texture2D Vignette;   // 320x180
         public static PixelFont Font;
 
@@ -27,6 +28,7 @@ namespace HolyPeak.Gfx
             Glow = MakeRadial(64, r => { float t = 1 - r; return t * t * t; });
             GlowSmall = MakeRadial(16, r => { float t = 1 - r; return t * t; });
             Disc = MakeRadial(16, r => r < 0.92f ? 1f : 0f);
+            Soft = MakeRadial(64, r => { float t = 1 - r * r; return t * t; });
             Ring = MakeRadial(32, r => r > 0.82f && r < 0.97f ? 1f : 0f);
             Vignette = MakeVignette();
             Font = new PixelFont(gd);
@@ -96,6 +98,12 @@ namespace HolyPeak.Gfx
         {
             float s = radius * 2f / Glow.Width;
             sb.Draw(Glow, center, null, c, 0f, new Vector2(Glow.Width / 2f), s, SpriteEffects.None, 0f);
+        }
+
+        public static void SoftAt(SpriteBatch sb, Vector2 center, float radius, Color c)
+        {
+            float s = radius * 2f / Soft.Width;
+            sb.Draw(Soft, center, null, c, 0f, new Vector2(Soft.Width / 2f), s, SpriteEffects.None, 0f);
         }
 
         public static void DiscAt(SpriteBatch sb, Vector2 center, float radius, Color c)

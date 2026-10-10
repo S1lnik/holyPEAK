@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using HolyPeak.Audio;
@@ -9,80 +8,73 @@ using HolyPeak.World;
 namespace HolyPeak.Gfx
 {
     /// <summary>
-    /// Everything about how the pilgrim looks: animation, squash &amp; stretch, the scarf (whose colour
-    /// shows whether the dash is ready), dash afterimages and footstep dust.
+    /// How the pilgrim looks: animation, squash and stretch, the flowing cloak, the staff (and the slash
+    /// arcs it leaves), the kite, the lantern at the staff's head, dust and footstep sounds.
     /// </summary>
     public sealed class PlayerVisual
     {
-        public static readonly Color ScarfNoDash = G.Hex(0xe9dcc0);
-        public static readonly Color ScarfReady = G.Hex(0xe2333f);
-        public static readonly Color ScarfGold = G.Hex(0xffc94a);
-        /// <summary>Set once every ember has been carried to the top: the scarf glows gold.</summary>
-        public bool Golden;
-        private Color Ready => Golden ? ScarfGold : ScarfReady;
-        public static readonly Color ScarfSpent = G.Hex(0x8fdcff);
+        public static readonly Color Outline = G.Hex(0x1b1630);
+        public static readonly Color Wood = G.Hex(0x8a5a32), WoodLight = G.Hex(0xc08a50);
+        public static readonly Color Brass = G.Hex(0xf0c04c), BrassDark = G.Hex(0xa8782a);
+        public static readonly Color Lantern = G.Hex(0xffd88a);
+        public static readonly Color CloakColor = G.Hex(0x29355e), CloakLight = G.Hex(0x3c4d7e);
+        public static readonly Color SlashColor = G.Hex(0xfff2d0);
 
-        private const int ScarfLen = 6;
-        private readonly Vector2[] _scarf = new Vector2[ScarfLen];
+        private const int CloakLen = 5;
+        private readonly Vector2[] _cloak = new Vector2[CloakLen];
         public Vector2 Scale = Vector2.One;
         private string _frame = "idle0";
-        private float _anim, _idle, _flash, _ghostTimer, _dustTimer, _slideTimer, _time;
+        private float _anim, _idle, _dustTimer, _slideTimer, _time, _blinkT = 3f, _healGlow;
         private int _runFrame, _lastRunFrame;
-        private Color _scarfColor = ScarfReady;
-        public float GiftBlend = 1f;   // 0 = cream scarf, 1 = full colour (used by the shrine cutscene)
-
-        private struct Ghost
-        {
-            public Vector2 Pos, Scale;
-            public string Frame;
-            public bool Flip;
-            public float Life;
-            public Color Color;
-        }
-
-        private readonly List<Ghost> _ghosts = new List<Ghost>();
-
-        public Color ScarfColor => _scarfColor;
+        private float _staffAngle = -MathF.PI / 2;
+        private Strike _lastStrike;
+        private float _strikeT;
+        private int _strikeFacing = 1;
+        private float _kiteOpen;
+        public bool HasBell;
+        public Vector2 LanternPos { get; private set; }
+        public float LanternGlow { get; private set; } = 1f;
 
         public void Reset(in PlayerSim p)
         {
-            var anchor = Anchor(p);
-            for (int i = 0; i < ScarfLen; i++) _scarf[i] = anchor + new Vector2(-p.Facing * i * 1.5f, i * 0.5f);
+            var a = CloakAnchor(p);
+            for (int i = 0; i < CloakLen; i++) _cloak[i] = a + new Vector2(-p.Facing * i * 2f, i * 1.5f);
             Scale = Vector2.One;
-            _ghosts.Clear();
-            _flash = 0;
+            _kiteOpen = 0;
+            _strikeT = 9;
         }
 
-        private static Vector2 Anchor(in PlayerSim p) => new Vector2(p.X + PlayerSim.W / 2f - p.Facing * 1f, p.Y + 3.5f);
+        private static Vector2 Feet(in PlayerSim p) => new Vector2(p.X + PlayerSim.W / 2f, p.Y + PlayerSim.H);
+        private Vector2 CloakAnchor(in PlayerSim p) => Feet(p) + new Vector2(-p.Facing * 2.5f, -10f + (Scale.Y < 1 ? 2 : 0));
 
-        public void OnEvent(in GameEvent e, in PlayerSim p, Particles parts, Style st, bool shakeOn, Action<float, float> shake)
+        public void OnEvent(in GameEvent e, in PlayerSim p, Particles parts, Style st)
         {
             var rng = parts.Rng;
             Color dust = G.Mix(st.Light2, st.Base, 0.4f) * 0.9f;
             switch (e.Type)
             {
                 case Ev.Jump:
-                    Scale = new Vector2(0.72f, 1.32f);
+                    Scale = new Vector2(0.75f, 1.28f);
                     for (int i = 0; i < 5; i++)
                         parts.Emit(e.Pos + new Vector2(rng.Range(-3, 3), 0), new Vector2(rng.Range(-25, 25), rng.Range(-14, -2)), dust, 0.35f, 1, drag: 4);
-                    AudioManager.Play("jump", 0.55f, pitchVariance: 0.06f);
+                    AudioManager.Play("jump", 0.5f, pitchVariance: 0.06f);
                     break;
-                case Ev.WallJump:
-                    Scale = new Vector2(0.75f, 1.3f);
-                    for (int i = 0; i < 6; i++)
-                        parts.Emit(e.Pos + new Vector2(0, rng.Range(-4, 2)), new Vector2(e.Dir.X * rng.Range(10, 40), rng.Range(-20, 10)), dust, 0.35f, 1, drag: 4);
-                    AudioManager.Play("walljump", 0.55f, pitchVariance: 0.05f);
+                case Ev.Leap:
+                    Scale = new Vector2(0.78f, 1.25f);
+                    for (int i = 0; i < 7; i++)
+                        parts.Emit(e.Pos + new Vector2(0, rng.Range(-6, 2)), new Vector2(e.Dir.X * rng.Range(10, 50), rng.Range(-25, 10)), dust, 0.35f, 1, drag: 4);
+                    AudioManager.Play("leap", 0.6f, pitchVariance: 0.05f);
                     break;
-                case Ev.SuperJump:
-                    Scale = new Vector2(1.35f, 0.75f);
-                    for (int i = 0; i < 10; i++)
-                        parts.Emit(e.Pos, new Vector2(-e.Dir.X * rng.Range(20, 70), rng.Range(-20, 0)), dust, 0.4f, 1, drag: 4);
-                    AudioManager.Play("superjump", 0.65f);
+                case Ev.Cling:
+                    Scale = new Vector2(1.15f, 0.9f);
+                    for (int i = 0; i < 4; i++)
+                        parts.Emit(e.Pos + new Vector2(0, rng.Range(-3, 5)), new Vector2(-e.Dir.X * rng.Range(5, 20), rng.Range(-10, 10)), dust, 0.3f, 1, drag: 4);
+                    AudioManager.Play("cling", 0.5f, pitchVariance: 0.08f);
                     break;
                 case Ev.Land:
                 {
-                    float impact = Calc.Clamp01((e.Dir.Y - 40) / 200f);
-                    Scale = new Vector2(1 + 0.4f * impact, 1 - 0.32f * impact);
+                    float impact = Calc.Clamp01((e.Dir.Y - 60) / 180f);
+                    Scale = new Vector2(1 + 0.35f * impact, 1 - 0.28f * impact);
                     int n = (int)(2 + impact * 8);
                     for (int i = 0; i < n; i++)
                     {
@@ -92,22 +84,27 @@ namespace HolyPeak.Gfx
                     if (impact > 0.05f) AudioManager.Play("land", 0.25f + impact * 0.45f, pitchVariance: 0.08f);
                     break;
                 }
-                case Ev.Dash:
-                {
-                    Scale = MathF.Abs(e.Dir.X) > MathF.Abs(e.Dir.Y) ? new Vector2(1.4f, 0.65f) : new Vector2(0.65f, 1.4f);
-                    _ghostTimer = 0;
-                    for (int i = 0; i < 10; i++)
-                        parts.Emit(e.Pos, -e.Dir * rng.Range(30, 90) + rng.InCircle(20), _scarfColor * 0.9f, 0.35f, 1, drag: 3);
-                    AudioManager.Play("dash", 0.7f, pitchVariance: 0.04f);
-                    if (shakeOn) shake(0.12f, 1.5f);
+                case Ev.Swing:
+                    _lastStrike = p.Attack;
+                    _strikeT = 0;
+                    _strikeFacing = p.Facing;
+                    AudioManager.Play("swing", 0.55f, pitchVariance: 0.1f);
                     break;
-                }
-                case Ev.DashRefill:
-                    _flash = 0.12f;
-                    AudioManager.Play("refill", 0.3f);
+                case Ev.Pogo:
+                    Scale = new Vector2(0.8f, 1.25f);
+                    AudioManager.Play("pogo", 0.6f, pitchVariance: 0.05f);
                     break;
-                case Ev.WallSlideStart:
-                    AudioManager.Play("slide", 0.25f, pitchVariance: 0.1f);
+                case Ev.GlideOpen:
+                    AudioManager.Play("glide", 0.55f, pitchVariance: 0.05f);
+                    break;
+                case Ev.HealStart:
+                    AudioManager.Play("healstart", 0.5f);
+                    break;
+                case Ev.Heal:
+                    _healGlow = 1f;
+                    parts.Burst(e.Pos, 14, Lantern, 20, 60, 0.6f, 1, -30, 3, additive: true);
+                    parts.Emit(e.Pos, Vector2.Zero, Lantern * 0.6f, 0.5f, 6, PShape.Glow, sizeEnd: 40, additive: true);
+                    AudioManager.Play("heal", 0.7f);
                     break;
             }
         }
@@ -115,116 +112,250 @@ namespace HolyPeak.Gfx
         public void Update(in PlayerSim p, float dt, float wind, Particles parts, Style st)
         {
             _time += dt;
-            Scale = Calc.Approach(Scale, Vector2.One, dt * 3.2f);
-            if (_flash > 0) _flash -= dt;
-
-            // Scarf colour follows dash state.
-            Color target = !p.DashAbility ? ScarfNoDash : (p.Dashes > 0 ? Ready : ScarfSpent);
-            target = Color.Lerp(ScarfNoDash, target, GiftBlend);
-            _scarfColor = _flash > 0 ? Color.White : Color.Lerp(_scarfColor, target, Calc.Damp(30f, dt));
+            Scale = Calc.Approach(Scale, Vector2.One, dt * 3.0f);
+            _strikeT += dt;
+            _healGlow = Math.Max(0, _healGlow - dt * 1.5f);
+            _kiteOpen = Calc.Approach(_kiteOpen, p.Gliding ? 1 : 0, dt * (p.Gliding ? 9 : 6));
+            _blinkT -= dt;
+            if (_blinkT < -0.12f) _blinkT = 2.5f + parts.Rng.Range(0, 3f);
 
             // Animation
-            if (p.State == PState.Dash) _frame = "dash";
-            else if (p.WallSliding) _frame = "slide";
-            else if (!p.OnGround) _frame = p.Speed.Y < 10 ? "jump" : "fall";
+            if (p.State == PState.Dead || p.StunT > 0) _frame = "hurt";
+            else if (p.Healing) _frame = "kneel";
+            else if (p.Clinging) _frame = "cling";
+            else if (p.Gliding) _frame = "glide";
+            else if (_strikeT < 0.2f && _lastStrike == Strike.Up) _frame = "lookup";
+            else if (!p.OnGround) _frame = p.Speed.Y < 20 ? "jump" : "fall";
             else if (MathF.Abs(p.Speed.X) > 8)
             {
-                _anim += dt * (4f + MathF.Abs(p.Speed.X) * 0.1f);
+                _anim += dt * (5f + MathF.Abs(p.Speed.X) * 0.09f);
                 _runFrame = (int)_anim % 4;
                 _frame = "run" + _runFrame;
                 if (_runFrame != _lastRunFrame && (_runFrame == 0 || _runFrame == 2))
-                    AudioManager.Play("step", 0.18f, -0.2f, pitchVariance: 0.15f);
+                    AudioManager.Play("step", 0.16f, -0.2f, pitchVariance: 0.15f);
                 _lastRunFrame = _runFrame;
             }
             else
             {
                 _idle += dt;
-                _frame = ((int)(_idle / 0.55f) & 1) == 0 ? "idle0" : "idle1";
+                _frame = _blinkT < 0 ? "blink" : (((int)(_idle / 0.6f) & 1) == 0 ? "idle0" : "idle1");
             }
 
-            // Dash afterimages
-            if (p.State == PState.Dash)
-            {
-                _ghostTimer -= dt;
-                if (_ghostTimer <= 0)
-                {
-                    _ghostTimer = 0.035f;
-                    _ghosts.Add(new Ghost { Pos = Feet(p), Frame = _frame, Flip = p.Facing < 0, Scale = Scale, Life = 0.28f, Color = Ready });
-                }
-            }
-            for (int i = _ghosts.Count - 1; i >= 0; i--)
-            {
-                var g = _ghosts[i];
-                g.Life -= dt;
-                if (g.Life <= 0) _ghosts.RemoveAt(i); else _ghosts[i] = g;
-            }
+            // Staff angle
+            float target = StaffRest(p);
+            float swing = SwingAngle(p, out bool swinging);
+            if (swinging) _staffAngle = swing;
+            else _staffAngle = LerpAngle(_staffAngle, target, Calc.Damp(16f, dt));
 
-            // Dust while running / sliding
+            var hand = Hand(p);
+            var dir = new Vector2(MathF.Cos(_staffAngle), MathF.Sin(_staffAngle));
+            LanternPos = hand + dir * 11f;
+            LanternGlow = 0.9f + 0.1f * MathF.Sin(_time * 7f) * MathF.Sin(_time * 3.1f) + _healGlow * 0.8f;
+
+            // Dust
             Color dust = G.Mix(st.Light2, st.Base, 0.4f) * 0.8f;
             _dustTimer -= dt;
             if (p.OnGround && MathF.Abs(p.Speed.X) > 70 && _dustTimer <= 0)
             {
-                _dustTimer = 0.09f;
+                _dustTimer = 0.1f;
                 parts.Emit(Feet(p) + new Vector2(-p.Facing * 2, -1), new Vector2(-p.Facing * parts.Rng.Range(5, 20), parts.Rng.Range(-10, -2)), dust, 0.3f, 1, drag: 4);
             }
-            if (p.WallSliding)
+            if (p.Clinging && p.Speed.Y > 10)
             {
                 _slideTimer -= dt;
                 if (_slideTimer <= 0)
                 {
-                    _slideTimer = 0.06f;
-                    parts.Emit(new Vector2(p.WallDir > 0 ? p.X + PlayerSim.W : p.X, p.Y + parts.Rng.Range(2, 8)),
+                    _slideTimer = 0.07f;
+                    parts.Emit(new Vector2(p.WallDir > 0 ? p.X + PlayerSim.W : p.X, p.Y + parts.Rng.Range(2, 10)),
                                new Vector2(-p.WallDir * parts.Rng.Range(4, 14), parts.Rng.Range(-6, 4)), dust, 0.3f, 1, drag: 4);
                 }
             }
-
-            // Scarf physics: each knot trails the previous one.
-            _scarf[0] = Anchor(p) + new Vector2(0, _frame == "idle1" || _frame == "run1" || _frame == "run3" ? 1 : 0);
-            float seg = 1.8f;
-            for (int i = 1; i < ScarfLen; i++)
+            if (p.Healing && parts.Rng.Chance(dt * 30))
             {
-                var force = new Vector2(-p.Facing * 7f + wind * 0.45f, 34f) + new Vector2(0, MathF.Sin(_time * 9f + i * 0.9f) * 7f);
-                if (p.State == PState.Dash) force += -p.DashDir * 40f;
-                _scarf[i] += force * dt;
-                var d = _scarf[i] - _scarf[i - 1];
+                var c = p.Center + parts.Rng.InCircle(14);
+                parts.Emit(c, (p.Center - c) * 2.5f, Lantern, 0.4f, 1, additive: true);
+            }
+
+            // Cloak: each knot trails the previous one.
+            _cloak[0] = CloakAnchor(p);
+            float seg = 2.4f;
+            for (int i = 1; i < CloakLen; i++)
+            {
+                var force = new Vector2(-p.Facing * 10f + wind * 0.5f - p.Speed.X * 0.15f, 30f - p.Speed.Y * 0.12f) + new Vector2(0, MathF.Sin(_time * 7f + i * 0.9f) * 6f);
+                if (p.Gliding) force.Y -= 20f;
+                _cloak[i] += force * dt;
+                var d = _cloak[i] - _cloak[i - 1];
                 float len = d.Length();
-                if (len > seg) _scarf[i] = _scarf[i - 1] + d / len * seg;
+                if (len > seg) _cloak[i] = _cloak[i - 1] + d / len * seg;
             }
         }
 
-        public static Vector2 Feet(in PlayerSim p) => new Vector2(p.X + PlayerSim.W / 2f, p.Y + PlayerSim.H);
-
-        public void Draw(SpriteBatch sb, in PlayerSim p, float alpha = 1f)
+        private static Vector2 Hand(in PlayerSim p)
         {
-            var origin = new Vector2(5, 13);
-            foreach (var g in _ghosts)
+            var f = Feet(p);
+            if (p.Healing) return f + new Vector2(p.Facing * 4, -5);
+            if (p.Clinging) return f + new Vector2(-p.WallDir * 3, -8);
+            return f + new Vector2(p.Facing * 4, -7);
+        }
+
+        private float StaffRest(in PlayerSim p)
+        {
+            int f = p.Clinging ? -p.WallDir : p.Facing;
+            float a;
+            if (p.Gliding) a = -MathF.PI / 2 + f * 0.12f;
+            else if (p.Healing) a = -MathF.PI / 2;
+            else if (p.Clinging) a = -1.0f;
+            else if (!p.OnGround) a = p.Speed.Y < 0 ? -1.25f : -1.9f;
+            else if (MathF.Abs(p.Speed.X) > 8) a = -1.15f + MathF.Sin(_anim * MathF.PI / 2) * 0.08f;
+            else a = -MathF.PI / 2 + 0.08f;
+            return f > 0 ? a : MathF.PI - a;
+        }
+
+        private float SwingAngle(in PlayerSim p, out bool swinging)
+        {
+            swinging = _strikeT < PlayerSim.StrikeTime;
+            if (!swinging) return 0;
+            float k = Calc.EaseOutCubic(Math.Min(1, _strikeT / 0.11f));
+            float a0, a1;
+            switch (_lastStrike)
             {
-                float a = g.Life / 0.28f;
-                Sprites.DrawSilhouette(sb, g.Frame, Round(g.Pos), g.Color * (0.6f * a * alpha), origin, g.Scale, g.Flip);
+                case Strike.Up: a0 = 0.2f; a1 = -1.95f; break;
+                case Strike.Down: a0 = -1.2f; a1 = 1.65f; break;
+                default: a0 = -2.3f; a1 = 0.35f; break;
             }
+            float a = Calc.Lerp(a0, a1, k);
+            return _strikeFacing > 0 ? a : MathF.PI - a;
+        }
 
-            // scarf: stamp small squares along each segment; outline pass first, then colour
-            Color outline = G.Hex(0x1b1630) * alpha;
-            for (int pass = 0; pass < 2; pass++)
-                for (int i = ScarfLen - 1; i >= 1; i--)
-                {
-                    float size = i < 4 ? 2 : 1;
-                    Color c = pass == 0 ? outline : (i >= ScarfLen - 2 ? G.Mul(_scarfColor, 0.78f) : _scarfColor) * alpha;
-                    float s = size + (pass == 0 ? 2 : 0);
-                    for (int st = 0; st < 3; st++)
-                    {
-                        var pos = Round(Vector2.Lerp(_scarf[i - 1], _scarf[i], st / 3f));
-                        G.Rect(sb, pos.X - MathF.Floor(s / 2f), pos.Y - MathF.Floor(s / 2f), s, s, c);
-                    }
-                }
-
-            Sprites.Draw(sb, _frame, Round(Feet(p)), Color.White * alpha, origin, Scale, p.Facing < 0);
-
-            // the knot of the scarf sits over the neck
-            var k = Round(_scarf[0]);
-            G.Rect(sb, k.X - 1, k.Y - 1, 3, 2, _scarfColor * alpha);
+        private static float LerpAngle(float a, float b, float t)
+        {
+            float d = MathF.IEEERemainder(b - a, MathF.PI * 2);
+            return a + d * t;
         }
 
         private static Vector2 Round(Vector2 v) => new Vector2(MathF.Round(v.X), MathF.Round(v.Y));
+
+        /// <summary>Plots a 1-pixel line, which stays crisp where a rotated sprite would smear.</summary>
+        public static void PixelLine(SpriteBatch sb, Vector2 a, Vector2 b, Color c, int thickness = 1)
+        {
+            int x0 = (int)MathF.Round(a.X), y0 = (int)MathF.Round(a.Y), x1 = (int)MathF.Round(b.X), y1 = (int)MathF.Round(b.Y);
+            int dx = Math.Abs(x1 - x0), dy = -Math.Abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+            int o = thickness / 2;
+            while (true)
+            {
+                G.Rect(sb, x0 - o, y0 - o, thickness, thickness, c);
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        public void Draw(SpriteBatch sb, in PlayerSim p, float alpha = 1f)
+        {
+            // Flicker while invulnerable.
+            if (p.Invuln > 0 && p.State == PState.Normal && ((int)(p.Invuln * 20) & 1) == 0) alpha *= 0.35f;
+            var feet = Round(Feet(p));
+            int f = p.Facing;
+
+            // Kite above the staff
+            var hand = Round(Hand(p));
+            var dir = new Vector2(MathF.Cos(_staffAngle), MathF.Sin(_staffAngle));
+            var tip = hand + dir * 10f;
+            var butt = hand - dir * 5f;
+            if (_kiteOpen > 0.05f) DrawKite(sb, tip, alpha);
+
+            // Cloak, outline pass then colour
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = CloakLen - 1; i >= 1; i--)
+                {
+                    float w = 3.2f - i * 0.45f + (pass == 0 ? 2 : 0);
+                    Color c = pass == 0 ? Outline : (i <= 1 ? CloakLight : CloakColor);
+                    for (int s = 0; s < 3; s++)
+                    {
+                        var pos = Round(Vector2.Lerp(_cloak[i - 1], _cloak[i], s / 3f));
+                        G.Rect(sb, pos.X - MathF.Floor(w / 2f), pos.Y - MathF.Floor(w / 2f), MathF.Ceiling(w), MathF.Ceiling(w), c * alpha);
+                    }
+                }
+
+            var r = Sprites.Frames[_frame];
+            sb.Draw(Sprites.Sheet, feet, r, Color.White * alpha, 0f, new Vector2(r.Width / 2f, r.Height), Scale,
+                    f < 0 ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+
+            DrawStaff(sb, butt, tip, alpha);
+            // hand gripping the staff
+            G.Rect(sb, hand.X - 1, hand.Y - 1, 2, 2, Sprites.PilgrimPal['b'] * alpha);
+        }
+
+        private void DrawStaff(SpriteBatch sb, Vector2 butt, Vector2 tip, float alpha)
+        {
+            PixelLine(sb, butt, tip, Outline * alpha, 3);
+            PixelLine(sb, butt, tip, Wood * alpha);
+            // head: a small brass lantern, or the bell once found
+            var t = Round(tip);
+            G.Rect(sb, t.X - 2, t.Y - 2, 5, 5, Outline * alpha);
+            if (HasBell)
+            {
+                G.Rect(sb, t.X - 1, t.Y - 2, 3, 3, Brass * alpha);
+                G.Rect(sb, t.X - 2, t.Y + 1, 5, 1, BrassDark * alpha);
+                G.Rect(sb, t.X, t.Y + 2, 1, 1, Outline * alpha);
+            }
+            else
+            {
+                G.Rect(sb, t.X - 1, t.Y - 1, 3, 3, BrassDark * alpha);
+                G.Rect(sb, t.X, t.Y, 1, 1, Lantern * alpha);
+            }
+        }
+
+        private void DrawKite(SpriteBatch sb, Vector2 tip, float alpha)
+        {
+            var f = Sprites.Frames["kite"];
+            float open = Calc.EaseOutBack(_kiteOpen);
+            var pos = Round(tip + new Vector2(0, -3 - 3 * open));
+            var sway = MathF.Sin(_time * 5f) * 0.12f;
+            sb.Draw(Sprites.Sheet, pos, f, Color.White * alpha, sway, new Vector2(f.Width / 2f, f.Height), new Vector2(open, Math.Max(0.3f, open)), SpriteEffects.None, 0f);
+            // strings
+            G.Rect(sb, pos.X, pos.Y, 1, 3, Outline * (0.6f * alpha));
+        }
+
+        /// <summary>Slash arcs and the lantern glow (drawn in the additive pass).</summary>
+        public void DrawGlow(SpriteBatch sb, in PlayerSim p)
+        {
+            if (p.State == PState.Dead) return;
+            G.GlowAt(sb, LanternPos, 9 * LanternGlow, Lantern * 0.35f);
+            if (_strikeT < 0.16f && _lastStrike != Strike.None)
+            {
+                var hand = Hand(p);
+                float k = Calc.EaseOutCubic(Math.Min(1, _strikeT / 0.11f));
+                float fade = 1 - Calc.Clamp01((_strikeT - 0.08f) / 0.08f);
+                float a0, a1;
+                switch (_lastStrike)
+                {
+                    case Strike.Up: a0 = 0.2f; a1 = -1.95f; break;
+                    case Strike.Down: a0 = -1.2f; a1 = 1.65f; break;
+                    default: a0 = -2.3f; a1 = 0.35f; break;
+                }
+                float aEnd = Calc.Lerp(a0, a1, k);
+                float aStart = Calc.Lerp(a0, a1, Math.Max(0, k - 0.8f));
+                // a filled crescent: thickest in the middle of the sweep, bright on the outer edge
+                int steps = 48;
+                for (int i = 0; i <= steps; i++)
+                {
+                    float t = i / (float)steps;
+                    float a = Calc.Lerp(aStart, aEnd, t);
+                    if (_strikeFacing < 0) a = MathF.PI - a;
+                    var d = new Vector2(MathF.Cos(a), MathF.Sin(a));
+                    float thick = MathF.Sin(t * MathF.PI) * 6f + 0.5f;
+                    float outer = 17f;
+                    for (float rr = outer - thick; rr <= outer; rr += 0.5f)
+                    {
+                        var q = Round(hand + d * rr);
+                        float edge = (rr - (outer - thick)) / Math.Max(0.5f, thick);
+                        Color c = Color.Lerp(G.Hex(0xffd88a), SlashColor, edge);
+                        G.Rect(sb, q.X, q.Y, 1, 1, c * (fade * (0.25f + 0.75f * t) * (0.45f + 0.55f * edge)));
+                    }
+                }
+            }
+        }
     }
 }
