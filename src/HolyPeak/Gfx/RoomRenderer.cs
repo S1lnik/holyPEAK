@@ -15,6 +15,7 @@ namespace HolyPeak.Gfx
         private readonly Room _room;
         private readonly Style _st;
         private readonly Texture2D _front, _back, _crumble;
+        private readonly System.Collections.Generic.List<Vector2> _lights;
         public bool EmberGhost;        // already collected on an earlier visit
         public Vector2 EmberPos;       // where the ember is drawn (follows the player when carried)
         public float BellSwing;        // radians amplitude
@@ -25,7 +26,7 @@ namespace HolyPeak.Gfx
         {
             _room = room;
             _st = st;
-            TileArt.Build(room, st, out _front, out _back);
+            TileArt.Build(room, st, out _front, out _back, out _lights);
             _crumble = MakeCrumble(st);
             if (room.HasEmber) EmberPos = new Vector2(room.Ember.X, room.Ember.Y);
         }
@@ -172,30 +173,54 @@ namespace HolyPeak.Gfx
 
         private void DrawSpring(SpriteBatch sb, in SpringEnt s)
         {
-            float comp = s.Anim > 0.5f ? (1 - s.Anim) * 2 : s.Anim * 2; // squash then overshoot
-            float ext = s.Anim > 0 ? 1 + (s.Anim > 0.75f ? -0.6f : 0.6f * MathF.Sin(s.Anim * MathF.PI * 3)) : 0;
-            _ = comp;
-            Color plate = G.Hex(0xd8d8e0), dark = G.Hex(0x4a4a5c), coil = G.Hex(0xe2333f), coilD = G.Hex(0x8a1c28);
-            int h = (int)MathF.Round(4 + ext * 2);
-            h = Math.Clamp(h, 2, 7);
+            // squash on impact, overshoot, settle
+            float ext = 0;
+            if (s.Anim > 0)
+            {
+                float t = 1 - s.Anim;
+                ext = t < 0.15f ? -t / 0.15f : MathF.Sin((t - 0.15f) * 14f) * MathF.Exp(-(t - 0.15f) * 5f) * 1.6f;
+            }
+            Color outline = G.Hex(0x1b1630), plate = G.Hex(0xffd166), plateD = G.Hex(0xd6902a), plateL = G.Hex(0xfff2c2);
+            Color coil = G.Hex(0xe2333f), coilD = G.Hex(0x8a1c28), basec = G.Hex(0x5a5a70);
+            int h = Math.Clamp((int)MathF.Round(5 + ext * 2), 2, 9);
             if (s.Dir == 0)
             {
                 int bx = s.X, by = s.Y + 8;
-                G.Rect(sb, bx + 1, by - 2, 6, 2, dark);
-                for (int i = 0; i < h - 2; i++)
-                    G.Rect(sb, bx + ((i & 1) == 0 ? 2 : 3), by - 3 - i, 3, 1, (i & 1) == 0 ? coil : coilD);
-                G.Rect(sb, bx, by - h - 1, 8, 2, plate);
-                G.Rect(sb, bx, by - h, 8, 1, G.Mul(plate, 0.7f));
+                // base
+                G.Rect(sb, bx, by - 2, 8, 2, outline);
+                G.Rect(sb, bx + 1, by - 2, 6, 1, basec);
+                // coil
+                for (int i = 0; i < h - 3; i++)
+                {
+                    int y = by - 3 - i;
+                    G.Rect(sb, bx + 1, y, 6, 1, outline);
+                    G.Rect(sb, bx + ((i & 1) == 0 ? 2 : 3), y, 3, 1, (i & 1) == 0 ? coil : coilD);
+                }
+                // plate
+                int py = by - h - 1;
+                G.Rect(sb, bx - 1, py - 1, 10, 4, outline);
+                G.Rect(sb, bx, py, 8, 2, plate);
+                G.Rect(sb, bx, py, 8, 1, plateL);
+                G.Rect(sb, bx + 1, py + 1, 6, 1, plateD);
             }
             else
             {
                 int dir = s.Dir;
                 int wx = dir > 0 ? s.X : s.X + 8, by = s.Y;
-                G.Rect(sb, dir > 0 ? wx : wx - 2, by + 1, 2, 6, dark);
-                for (int i = 0; i < h - 2; i++)
-                    G.Rect(sb, dir > 0 ? wx + 2 + i : wx - 3 - i, by + ((i & 1) == 0 ? 2 : 3), 1, 3, (i & 1) == 0 ? coil : coilD);
+                G.Rect(sb, dir > 0 ? wx : wx - 2, by, 2, 8, outline);
+                G.Rect(sb, dir > 0 ? wx : wx - 1, by + 1, 1, 6, basec);
+                for (int i = 0; i < h - 3; i++)
+                {
+                    int x = dir > 0 ? wx + 2 + i : wx - 3 - i;
+                    G.Rect(sb, x, by + 1, 1, 6, outline);
+                    G.Rect(sb, x, by + ((i & 1) == 0 ? 2 : 3), 1, 3, (i & 1) == 0 ? coil : coilD);
+                }
                 int px = dir > 0 ? wx + h - 1 : wx - h - 1;
+                G.Rect(sb, px - 1, by - 1, 4, 10, outline);
                 G.Rect(sb, px, by, 2, 8, plate);
+                G.Rect(sb, dir > 0 ? px + 1 : px, by, 1, 8, plateL);
+                // an arrow hint on the plate showing the launch direction
+                G.Rect(sb, dir > 0 ? px + 3 : px - 2, by + 3, 1, 2, plateL * 0.8f);
             }
         }
 
@@ -292,6 +317,11 @@ namespace HolyPeak.Gfx
             {
                 var r = _room.BellRect;
                 G.GlowAt(sb, new Vector2(r.Center.X, r.Bottom - 22), 34 + MathF.Sin(time * 1.5f) * 4, G.Hex(0xffd88a) * 0.3f);
+            }
+            for (int i = 0; i < _lights.Count; i++)
+            {
+                float fl = 0.85f + 0.15f * MathF.Sin(time * 7f + i * 2.1f) * MathF.Sin(time * 3.3f + i);
+                G.GlowAt(sb, _lights[i], 16 * fl, G.Hex(0xffc860) * 0.4f);
             }
             foreach (var b in _room.Pulses)
                 if (b.Solid) G.GlowAt(sb, new Vector2(b.X + b.W / 2f, b.Y + b.H / 2f), b.W * 0.9f + 6, (b.Group == 1 ? PulseA : PulseB) * 0.22f);

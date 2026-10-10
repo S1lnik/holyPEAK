@@ -82,10 +82,9 @@ namespace HolyPeak
 
         protected override void Initialize()
         {
-            if (Auto != null)
-            {
-                Storage.OverrideFolder = Path.Combine(Path.GetTempPath(), "holypeak-auto-" + Environment.ProcessId);
-            }
+            string dataDir = Environment.GetEnvironmentVariable("HOLYPEAK_DATA");
+            if (!string.IsNullOrEmpty(dataDir)) Storage.OverrideFolder = dataDir;
+            else if (Auto != null) Storage.OverrideFolder = Path.Combine(Path.GetTempPath(), "holypeak-auto-" + Environment.ProcessId);
             Settings = Storage.Load<Settings>("settings.json");
             Save = Storage.Load<SaveData>("save.json");
             ApplyVideo();

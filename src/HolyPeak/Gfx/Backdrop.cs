@@ -282,7 +282,7 @@ namespace HolyPeak.Gfx
                     // rock streaks running down the faces
                     if (!snow && Calc.Hash(x, y / 5, seed + 2) > 0.9f) c = G.Mul(c, 0.85f);
                     float fade = Calc.Clamp01((rel - 0.45f) / 0.55f);
-                    c = G.Mix(c, st.Haze, haze + fade * 0.45f);
+                    c = G.Mix(c, G.Mix(st.Haze, st.Sky[2], 0.55f), haze + fade * 0.45f);
                     if (night > 0) c = G.Mix(c, st.Sky[1], night * (snow ? 0.55f : 1f));
                     data[y * w + x] = c;
                 }

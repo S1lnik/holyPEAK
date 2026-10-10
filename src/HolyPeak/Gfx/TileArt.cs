@@ -14,7 +14,11 @@ namespace HolyPeak.Gfx
     public static class TileArt
     {
         public static void Build(Room room, Style st, out Texture2D front, out Texture2D back)
+            => Build(room, st, out front, out back, out _);
+
+        public static void Build(Room room, Style st, out Texture2D front, out Texture2D back, out List<Vector2> lights)
         {
+            lights = new List<Vector2>();
             int cols = room.Cols, rows = room.Rows, W = room.Width, H = room.Height;
             var fp = new Color[W * H];
             var bp = new Color[W * H];
@@ -118,7 +122,7 @@ namespace HolyPeak.Gfx
 
                             Color c = alt ? AltPixel(st, x, y, seed) : TerrainPixel(st, x, y, seed);
                             float pd = pdist[y * W + x] == 255 ? 40 : pdist[y * W + x];
-                            float shade = 1f - (st.Id == 3 ? 0.16f : 0.3f) * Calc.SmoothStep((pd - 3f) / 26f);
+                            float shade = 1f - (st.Id == 3 ? 0.34f : 0.3f) * Calc.SmoothStep((pd - 3f) / (st.Id == 3 ? 18f : 26f));
                             if (d == 1 && (up || ul || ur)) c = G.Mix(c, alt ? st.AltLight : st.Light, 0.55f);
                             if (dn && 7 - ly <= 1) c = G.Mul(c, 0.8f);
                             c = G.Mul(c, shade);
@@ -240,8 +244,171 @@ namespace HolyPeak.Gfx
                         DecorateBottom(st, tx, ty, alt, seed, SetF);
                 }
 
+            PlaceDecor(room, st, seed, bp, W, H, lights);
+
             front = G.Make(W, H, fp);
             back = G.Make(W, H, bp);
+        }
+
+        // ---- background decorations --------------------------------------------------------
+
+        /// <summary>
+        /// Scatters chapter-specific scenery (trees, columns, lanterns...) behind the action on wide,
+        /// flat stretches of ground. Only uses empty cells, so it never hides a hazard.
+        /// </summary>
+        private static void PlaceDecor(Room room, Style st, int seed, Color[] bp, int W, int H, List<Vector2> lights)
+        {
+            int cols = room.Cols, rows = room.Rows;
+            bool Free(int tx, int ty)
+            {
+                if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return false;
+                char c = room.Def.Map[ty][tx];
+                return c == '.' || c == ':';
+            }
+            void Px(int x, int y, Color c)
+            {
+                if (x < 0 || y < 0 || x >= W || y >= H || c.A == 0) return;
+                bp[y * W + x] = c;
+            }
+            int lastX = -99;
+            for (int ty = 3; ty < rows; ty++)
+                for (int tx = 1; tx < cols - 1; tx++)
+                {
+                    if (!Room.IsSolidTile(room.TileAt(tx, ty))) continue;
+                    // need a flat run of 3 tiles with 3 free cells above each
+                    bool ok = true;
+                    for (int dx = -1; dx <= 1 && ok; dx++)
+                    {
+                        if (!Room.IsSolidTile(room.TileAt(tx + dx, ty))) ok = false;
+                        for (int dy = 1; dy <= 3 && ok; dy++) if (!Free(tx + dx, ty - dy)) ok = false;
+                    }
+                    if (!ok) continue;
+                    if (ty * 1000 + tx - lastX < 5 && lastX / 1000 == ty) continue;
+                    float h = Calc.Hash(tx, ty, seed + 101);
+                    if (h > 0.22f) continue;
+                    lastX = ty * 1000 + tx;
+                    int gx = tx * 8 + 4, gy = ty * 8;   // ground point (bottom centre)
+                    int kind = (int)(Calc.Hash(tx, ty, seed + 102) * 3);
+                    switch (st.Id)
+                    {
+                        case 0: if (kind < 2) Pine(Px, gx, gy, 12 + (int)(h * 40), st); else Bush(Px, gx, gy, st); break;
+                        case 1: if (kind == 0) Urn(Px, gx, gy, st); else Column(Px, gx, gy, 10 + (int)(h * 50), st); break;
+                        case 2: if (kind < 2) DeadTree(Px, gx, gy, 10 + (int)(h * 40), st); else IceCluster(Px, gx, gy, st); break;
+                        default: Lantern(Px, gx, gy, st); lights.Add(new Vector2(gx, gy - 9)); break;
+                    }
+                }
+        }
+
+        private static void Pine(Action<int, int, Color> px, int gx, int gy, int height, Style st)
+        {
+            Color dark = G.Mix(st.Silhouette, st.CapDark, 0.35f), mid = G.Mix(dark, st.CapDark, 0.45f), trunk = G.Mix(st.Dark, st.Outline, 0.4f);
+            for (int y = 0; y < 3; y++) px(gx, gy - 1 - y, trunk);
+            int top = gy - 3 - height;
+            for (int y = 0; y < height; y++)
+            {
+                float t = y / (float)height;
+                int tier = (int)(t * 3.2f);
+                float within = t * 3.2f - tier;
+                int half = (int)((tier + 1) * height * 0.07f + within * height * 0.12f) + 1;
+                for (int x = -half; x <= half; x++)
+                    px(gx + x, top + y, x < 0 ? mid : dark);
+            }
+        }
+
+        private static void Bush(Action<int, int, Color> px, int gx, int gy, Style st)
+        {
+            Color dark = G.Mix(st.CapDark, st.Silhouette, 0.4f), light = st.CapDark;
+            for (int y = 0; y < 5; y++)
+                for (int x = -5; x <= 5; x++)
+                {
+                    float d = (x * x) / 30f + ((y - 4) * (y - 4)) / 22f;
+                    if (d > 1) continue;
+                    px(gx + x, gy - 1 - y, x + y < 2 ? light : dark);
+                }
+            px(gx - 2, gy - 4, st.Accent2); px(gx + 2, gy - 3, st.Accent1);
+        }
+
+        private static void Column(Action<int, int, Color> px, int gx, int gy, int height, Style st)
+        {
+            Color c = G.Mix(st.Back, st.AltDark, 0.5f), l = G.Mix(st.BackLight, st.Alt, 0.4f), d = st.BackDark;
+            height = Math.Min(height, 30);
+            for (int y = 0; y < height; y++)
+                for (int x = -3; x <= 3; x++)
+                {
+                    Color col = x == -3 ? l : (x == 3 ? d : (x == -1 ? l : c));
+                    if ((y + 1) % 6 == 0) col = d;
+                    px(gx + x, gy - 1 - y, col);
+                }
+            // capital (or a broken top)
+            bool broken = height % 2 == 1;
+            for (int x = -5; x <= 5; x++)
+            {
+                if (broken && (x > 1 || Calc.Hash(gx + x, gy) > 0.6f)) continue;
+                px(gx + x, gy - height - 1, l);
+                px(gx + x, gy - height - 2, broken ? c : d);
+            }
+            for (int x = -5; x <= 5; x++) px(gx + x, gy - 1, d);
+        }
+
+        private static void Urn(Action<int, int, Color> px, int gx, int gy, Style st)
+        {
+            Color c = G.Mix(st.Alt, st.Back, 0.4f), l = st.AltLight, d = st.AltDark;
+            int[] w = { 2, 3, 4, 4, 3, 2, 3 };
+            for (int y = 0; y < w.Length; y++)
+                for (int x = -w[y]; x <= w[y]; x++)
+                    px(gx + x, gy - 1 - y, x == -w[y] ? l : (x == w[y] ? d : c));
+        }
+
+        private static void DeadTree(Action<int, int, Color> px, int gx, int gy, int height, Style st)
+        {
+            Color bark = G.Mix(st.Silhouette, st.Dark, 0.5f), snow = st.CapLight;
+            int x = gx;
+            for (int y = 0; y < height; y++)
+            {
+                px(x, gy - 1 - y, bark);
+                if (y > height / 3 && Calc.Hash(gx, y) > 0.72f)
+                {
+                    int dir = Calc.Hash(gx, y + 7) > 0.5f ? 1 : -1;
+                    int len = 2 + (int)(Calc.Hash(gx, y + 3) * 4);
+                    for (int k = 1; k <= len; k++)
+                    {
+                        px(x + dir * k, gy - 1 - y - k / 2, bark);
+                        if (k == len) px(x + dir * k, gy - 2 - y - k / 2, snow);
+                    }
+                }
+                if (y % 7 == 6 && Calc.Hash(gx, y) > 0.4f) x += Calc.Hash(gx, y + 1) > 0.5f ? 1 : -1;
+            }
+            px(x, gy - 1 - height, snow);
+        }
+
+        private static void IceCluster(Action<int, int, Color> px, int gx, int gy, Style st)
+        {
+            int[] hs = { 4, 7, 5, 3 };
+            for (int i = 0; i < hs.Length; i++)
+            {
+                int bx = gx - 3 + i * 2;
+                for (int y = 0; y < hs[i]; y++)
+                {
+                    px(bx, gy - 1 - y, y == hs[i] - 1 ? st.AltLight : st.Alt);
+                    px(bx + 1, gy - 1 - y, st.AltDark);
+                }
+            }
+        }
+
+        private static void Lantern(Action<int, int, Color> px, int gx, int gy, Style st)
+        {
+            Color stone = G.Mix(st.Back, st.Base, 0.5f), dark = st.BackDark, glow = G.Hex(0xffe08a), roof = st.Dark;
+            // base and post
+            for (int x = -2; x <= 2; x++) px(gx + x, gy - 1, dark);
+            for (int y = 2; y < 7; y++) { px(gx, gy - y, stone); px(gx - 1, gy - y, dark); }
+            // lamp box
+            for (int y = 7; y < 12; y++)
+                for (int x = -2; x <= 2; x++)
+                    px(gx + x, gy - y, Math.Abs(x) == 2 ? stone : glow);
+            // roof
+            for (int x = -4; x <= 4; x++) px(gx + x, gy - 12, roof);
+            for (int x = -3; x <= 3; x++) px(gx + x, gy - 13, roof);
+            px(gx, gy - 14, roof);
         }
 
         private static bool IsBackish(Room room, int tx, int ty)
