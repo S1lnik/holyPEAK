@@ -48,6 +48,7 @@ namespace HolyPeak.Audio
             // Title first so the menu has music quickly, then everything else in parallel.
             Task.Run(() =>
             {
+                CleanStaleCache();
                 // Each song renders its notes in parallel, so songs go one after another, title first.
                 foreach (var id in new[] { SongId.Title, SongId.Foothills, SongId.Ruins, SongId.Frost, SongId.Peak, SongId.Ending })
                     Render(id);
@@ -59,6 +60,19 @@ namespace HolyPeak.Audio
 
         private static string CachePath(SongId id)
             => System.IO.Path.Combine(Core.Storage.Dir, "cache", $"music-{CacheVersion}-{id}.pcm");
+
+        private static void CleanStaleCache()
+        {
+            try
+            {
+                string dir = System.IO.Path.Combine(Core.Storage.Dir, "cache");
+                if (!System.IO.Directory.Exists(dir)) return;
+                foreach (var f in System.IO.Directory.GetFiles(dir, "music-*.pcm*"))
+                    if (!System.IO.Path.GetFileName(f).StartsWith($"music-{CacheVersion}-") || f.EndsWith(".tmp"))
+                        System.IO.File.Delete(f);
+            }
+            catch (Exception e) { Console.Error.WriteLine("[audio] cache cleanup failed: " + e.Message); }
+        }
 
         private static void Render(SongId id)
         {

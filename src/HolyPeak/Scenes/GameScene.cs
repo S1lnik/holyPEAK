@@ -666,7 +666,8 @@ namespace HolyPeak.Scenes
             if (Game.Auto != null) Console.WriteLine($"[auto] BELL rung (embers {Save.Embers.Count}, deaths {Save.Deaths}, t={Save.PlayTime:0.0})");
             _phase = Phase.Bell;
             _phaseT = 0;
-            _room.P.State = PState.Frozen;
+            // The pilgrim lets go of the controls, lands and looks up at the bell.
+            _room.P.Facing = _room.BellRect.Center.X >= _room.P.Center.X ? 1 : -1;
             _rr.BellSwing = 0.45f;
             AudioManager.Play("bell", 1f);
             AudioManager.StopMusic(4f);
@@ -688,6 +689,11 @@ namespace HolyPeak.Scenes
         private void UpdateBell(float dt)
         {
             _phaseT += dt;
+            if (_room.P.State == PState.Dash) _room.P.State = PState.Normal;
+            _room.Update(new PlayerInput { MoveX = 0 }, dt);
+            foreach (var e in _room.Events)
+                if (e.Type == Ev.Land) _pv.OnEvent(e, _room.P, _parts, _st, Cfg.ScreenShake, Shake);
+            _room.Events.Clear();
             _parts.Update(dt);
             _rr.BellTime += dt;
             _rr.BellSwing = 0.45f * MathF.Exp(-_phaseT * 0.4f);

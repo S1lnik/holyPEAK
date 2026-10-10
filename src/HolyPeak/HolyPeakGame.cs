@@ -58,7 +58,7 @@ namespace HolyPeak
                 PreferredBackBufferHeight = G.ViewH * 4,
                 SynchronizeWithVerticalRetrace = auto == null,
                 HardwareModeSwitch = false,
-                GraphicsProfile = GraphicsProfile.HiDef,
+                GraphicsProfile = GraphicsProfile.Reach,
             };
             // Automated runs draw every simulated frame (no frame skipping) and run as fast as possible,
             // unless audio is being recorded, which needs real time.
