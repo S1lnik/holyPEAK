@@ -81,11 +81,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la dist
+          sed "s/<version>/${RELEASE_TAG#v}/g" .github/RELEASE_NOTES.md > "$RUNNER_TEMP/notes.md"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release edit "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/notes.md"
           else
             gh release create "$RELEASE_TAG" dist/* \
               --title "Holy Peak ${RELEASE_TAG#v}" \
-              --notes-file .github/RELEASE_NOTES.md \
+              --notes-file "$RUNNER_TEMP/notes.md" \
               --target "$GITHUB_SHA"
           fi
