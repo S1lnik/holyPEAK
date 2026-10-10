@@ -859,8 +859,21 @@ namespace HolyPeak.Scenes
 
         // ---- drawing -----------------------------------------------------------------------
 
+        private static Backdrop _prologueBd;
+
         public override void DrawWorld(SpriteBatch sb)
         {
+            if (_phase == Phase.Prologue)
+            {
+                // The far-off peak under the stars while the story is told.
+                _prologueBd ??= new Backdrop(Style.Title, 70, 0.5f, 0.2f, 0.55f);
+                SubPixel = Vector2.Zero;
+                sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: Matrix.CreateTranslation(1, 1, 0));
+                _prologueBd.Draw(sb, new Vector2(_phaseT * 3f, 0), new Point(G.ViewW, G.ViewH), _time, 0.8f);
+                sb.Draw(G.Vignette, Vector2.Zero, Color.White);
+                sb.End();
+                return;
+            }
             var camFloor = new Vector2(MathF.Floor(_cam.X), MathF.Floor(_cam.Y));
             SubPixel = _cam - camFloor;
             var cam = camFloor + _shakeOff;
@@ -950,7 +963,8 @@ namespace HolyPeak.Scenes
         private void DrawPrologue(SpriteBatch sb)
         {
             var font = G.Font;
-            G.Rect(sb, 0, 0, G.ViewW, G.ViewH, Color.Black);
+            float fadeIn = Calc.Clamp01(_phaseT / 2.5f);
+            G.Rect(sb, 0, 0, G.ViewW, G.ViewH, Color.Black * (1f - 0.45f * fadeIn));
             float y = 58;
             for (int i = 0; i < PrologueLines.Length; i++)
             {
