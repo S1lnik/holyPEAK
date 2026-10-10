@@ -157,6 +157,7 @@ namespace HolyPeak.Scenes
 
         private void LoadRoom(int index)
         {
+            if (index != _roomIndex) _roomDeaths = 0;
             _roomIndex = index;
             var def = Levels.All[index];
             if (Game.Auto != null) Console.WriteLine($"[auto] room {def.Id} (embers {Save.Embers.Count}, deaths {Save.Deaths}, t={Save.PlayTime:0.0})");
@@ -223,6 +224,7 @@ namespace HolyPeak.Scenes
             UpdateRumble(dt);
             _flash = Math.Max(0, _flash - dt * 2.5f);
             _emberPopup = Math.Max(0, _emberPopup - dt);
+            if (!_paused) _tipT = Math.Max(0, _tipT - dt);
             _pauseA = Calc.Approach(_pauseA, _paused ? 1 : 0, dt * 6);
 
             if (_paused) { UpdatePause(dt); return; }
@@ -498,8 +500,18 @@ namespace HolyPeak.Scenes
 
         // ---- death / respawn ---------------------------------------------------------------
 
+        private int _roomDeaths;
+        private float _tipT;
+        private bool _tipShown;
+
         private void StartDeath()
         {
+            _roomDeaths++;
+            if (_roomDeaths >= 12 && !_tipShown && !Cfg.AssistActive)
+            {
+                _tipShown = true;
+                _tipT = 6f;
+            }
             if (Game.Auto != null) Console.WriteLine($"[auto] DEATH in {_room.Def.Id} at {_room.P.X},{_room.P.Y}");
             _phase = Phase.Dying;
             _phaseT = 0;
@@ -905,6 +917,15 @@ namespace HolyPeak.Scenes
                 var f = Sprites.Frames["ember" + ((int)(_time * 10) % 3)];
                 sb.Draw(Sprites.Sheet, new Vector2(x + 4, 6), f, Color.White);
                 font.Draw(sb, s, new Vector2(x + 15, 7), G.Hex(0xffd9a0));
+            }
+
+            if (_tipT > 0 && _phase == Phase.Playing)
+            {
+                float ta = Calc.Clamp01(_tipT) * Calc.Clamp01((6f - _tipT) * 2f);
+                string tip = "Tip: assist options live in the pause menu.";
+                float tw = font.Measure(tip) + 12;
+                G.Rect(sb, G.ViewW / 2f - tw / 2f, G.ViewH - 18, tw, 13, Color.Black * (0.6f * ta));
+                font.DrawCentered(sb, tip, new Vector2(G.ViewW / 2f, G.ViewH - 16), new Color(230, 225, 240) * ta);
             }
 
             if (_phase == Phase.Prologue) DrawPrologue(sb);
