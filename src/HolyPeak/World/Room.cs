@@ -187,16 +187,17 @@ namespace HolyPeak.World
             GatesOpen = Flags.Contains("lever:" + gateKey);
             GateAnim = GatesOpen ? 1 : 0;
 
+            // An edge is open where the neighbouring room continues with an open tile.
             _openL = new bool[Rows]; _openR = new bool[Rows]; _openT = new bool[Cols]; _openB = new bool[Cols];
             for (int ty = 0; ty < Rows; ty++)
             {
-                _openL[ty] = Atlas.AtWorld(def.WorldX - 4, def.WorldY + ty * TileSize + 4) != null;
-                _openR[ty] = Atlas.AtWorld(def.WorldX + Width + 4, def.WorldY + ty * TileSize + 4) != null;
+                _openL[ty] = Atlas.OpenAt(def.WorldX - 4, def.WorldY + ty * TileSize + 4);
+                _openR[ty] = Atlas.OpenAt(def.WorldX + Width + 4, def.WorldY + ty * TileSize + 4);
             }
             for (int tx = 0; tx < Cols; tx++)
             {
-                _openT[tx] = Atlas.AtWorld(def.WorldX + tx * TileSize + 4, def.WorldY - 4) != null;
-                _openB[tx] = Atlas.AtWorld(def.WorldX + tx * TileSize + 4, def.WorldY + Height + 4) != null;
+                _openT[tx] = Atlas.OpenAt(def.WorldX + tx * TileSize + 4, def.WorldY - 4);
+                _openB[tx] = Atlas.OpenAt(def.WorldX + tx * TileSize + 4, def.WorldY + Height + 4);
             }
 
             string bossId = def.Prop("boss");
@@ -931,12 +932,14 @@ namespace HolyPeak.World
             public int ExitDir;
             public TileGroup[] Groups;
             public Thing[] Things;
+            public string[] Flags;
         }
 
         public Snapshot Save() => new Snapshot
         {
             P = P, Time = Time, GatesOpen = GatesOpen, ArenaClosed = ArenaClosed, Exited = Exited, ExitDir = ExitDir,
             HazardPending = HazardPending, Groups = (TileGroup[])Groups.Clone(), Things = (Thing[])Things.Clone(),
+            Flags = System.Linq.Enumerable.ToArray(Flags),
         };
 
         public void Load(Snapshot s)
@@ -945,6 +948,12 @@ namespace HolyPeak.World
             HazardPending = s.HazardPending;
             Array.Copy(s.Groups, Groups, Groups.Length);
             Array.Copy(s.Things, Things, Things.Length);
+            // flags are only ever added, so an equal count means the same set
+            if (Flags.Count != s.Flags.Length)
+            {
+                Flags.Clear();
+                foreach (var f in s.Flags) Flags.Add(f);
+            }
         }
     }
 }

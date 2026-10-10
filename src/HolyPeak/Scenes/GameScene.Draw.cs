@@ -423,6 +423,7 @@ namespace HolyPeak.Scenes
                 float frac = b.HpFraction;
                 _bossTrail = frac > _bossTrail ? frac : Calc.Approach(_bossTrail, frac, 1 / 60f * 0.4f);
                 float bw = 200, bx = (G.ViewW - bw) / 2, by = G.ViewH - 12;
+                for (int i = 0; i < 26; i++) G.Rect(sb, 0, G.ViewH - 26 + i, G.ViewW, 1, Color.Black * (0.55f * a * i / 26f));
                 font.DrawCentered(sb, b.Name, new Vector2(G.ViewW / 2f, by - 11), Color.White * a, Color.Black * a);
                 G.Rect(sb, bx - 1, by - 1, bw + 2, 6, Color.Black * (0.8f * a));
                 G.Rect(sb, bx, by, bw * _bossTrail, 4, G.Hex(0xffe8c0) * (0.6f * a));

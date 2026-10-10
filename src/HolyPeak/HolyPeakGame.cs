@@ -21,6 +21,7 @@ namespace HolyPeak
         public string Replay;            // input replay file for the game scene
         public string Give;              // flags to grant, e.g. "grips,bell,kite,boss:thornback"
         public string Keys;              // scripted presses: "frame:Button,frame:Button"
+        public bool Invincible;          // assist invincibility (for watching guardians)
     }
 
     public sealed class HolyPeakGame : Game
@@ -92,6 +93,7 @@ namespace HolyPeak
             else if (Auto != null) Storage.OverrideFolder = Path.Combine(Path.GetTempPath(), "holypeak-auto-" + Environment.ProcessId);
             Settings = Storage.Load<Settings>("settings.json");
             Save = Storage.Load<SaveData>("save.json");
+            if (Auto != null && Auto.Invincible) Settings.Invincible = true;
             ApplyVideo();
             base.Initialize();
         }

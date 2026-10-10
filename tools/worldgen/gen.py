@@ -32,6 +32,23 @@ class Room:
         self.g[y][x] = c
         return self
 
+    def fill(self, c='#'):
+        return self.r(0, 0, self.w - 1, self.h - 1, c)
+
+    def carve(self, x0, y0, x1, y1, c='.'):
+        return self.r(x0, y0, x1, y1, c)
+
+    def over(self, x0, y0, x1, y1, c, only='.:'):
+        """Paint c only over cells currently in `only` (keeps terrain)."""
+        for y in range(max(0, y0), min(self.h - 1, y1) + 1):
+            for x in range(max(0, x0), min(self.w - 1, x1) + 1):
+                if self.g[y][x] in only:
+                    self.g[y][x] = c
+        return self
+
+    def plat(self, x0, x1, y, c='-'):
+        return self.r(x0, y, x1, y, c)
+
     def hline(self, x0, x1, y, c='-'):
         return self.r(x0, y, x1, y, c)
 

@@ -471,8 +471,8 @@ namespace HolyPeak.Gfx
             for (int i = FrostWyrm.Segments - 1; i >= 0; i--)
             {
                 var s = w.Segment(i);
-                if (s.Y > floor + 8) continue;
-                float rad = i < 4 ? 6 : (i < 8 ? 5 : 4);
+                if (s.Y > floor + 3) continue;
+                float rad = i < 3 ? 7 : (i < 7 ? 6 : (i < 10 ? 5 : 4));
                 G.DiscAt(sb, s, rad + 1, o);
                 G.DiscAt(sb, s, rad, i % 2 == 0 ? ice : iceD);
                 G.Rect(sb, MathF.Round(s.X) - 1, MathF.Round(s.Y - rad + 1), 2, 2, iceL);
@@ -480,7 +480,7 @@ namespace HolyPeak.Gfx
                 G.Rect(sb, MathF.Round(s.X), MathF.Round(s.Y - rad - 2), 1, 2, iceL);
                 if (flash > 0 && i < 3) G.DiscAt(sb, s, rad, Color.White * flash);
             }
-            if (w.Head.Y < floor + 8)
+            if (w.Head.Y < floor + 4)
             {
                 var prev = w.Segment(0);
                 var d = w.Head - prev;

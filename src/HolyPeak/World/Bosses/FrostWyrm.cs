@@ -10,14 +10,15 @@ namespace HolyPeak.World
     /// </summary>
     public sealed class FrostWyrm : Boss
     {
-        public const int Segments = 11, Spacing = 4;
+        public const int Segments = 13;
+        public const float SegLen = 6.5f;
         private enum S { Hidden, Plume, Arc, Rise, Inhale, Breath, Sink, Quake, Rage }
 
         private readonly float _floor;
         private float _left, _right;
         private int _last = -1, _arcs;
         private float _x0, _x1, _dur, _s, _breathAngle;
-        private readonly Vector2[] _trail = new Vector2[Segments * Spacing + 2];
+        private readonly Vector2[] _trail = new Vector2[240];
         private int _trailHead;
         public Vector2 Head;
         public Vector2 PlumeAt;
@@ -34,7 +35,21 @@ namespace HolyPeak.World
             for (int i = 0; i < _trail.Length; i++) _trail[i] = Head;
         }
 
-        public Vector2 Segment(int i) => _trail[((_trailHead - (i + 1) * Spacing) % _trail.Length + _trail.Length) % _trail.Length];
+        /// <summary>Body segment i, spaced evenly along the path the head has travelled.</summary>
+        public Vector2 Segment(int i)
+        {
+            float want = (i + 1) * SegLen, walked = 0;
+            var prev = _trail[_trailHead];
+            for (int k = 1; k < _trail.Length; k++)
+            {
+                var p = _trail[((_trailHead - k) % _trail.Length + _trail.Length) % _trail.Length];
+                float d = Vector2.Distance(prev, p);
+                if (walked + d >= want && d > 0) return Vector2.Lerp(prev, p, (want - walked) / d);
+                walked += d;
+                prev = p;
+            }
+            return prev;
+        }
 
         private float Tell => Phase == 2 ? 0.8f : 1f;
 
@@ -227,7 +242,7 @@ namespace HolyPeak.World
             {
                 var s = Segment(i);
                 if (!Above(s)) continue;
-                int rad = i < 4 ? 6 : (i < 8 ? 5 : 4);
+                int rad = i < 3 ? 7 : (i < 7 ? 6 : (i < 10 ? 5 : 4));
                 var box = new Rectangle((int)s.X - rad, (int)s.Y - rad, rad * 2, rad * 2);
                 if (i < 3) Hurt.Add(box);
                 box.Inflate(-1, -1);

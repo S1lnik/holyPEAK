@@ -109,7 +109,17 @@ namespace HolyPeak.World
             CheckEdges();
         }
 
-        private static bool Passable(char c) => c != '#' && c != '=' && c != '|' && c != '!' && c != 'x' && c != 'b';
+        /// <summary>Tiles that can ever be walked through (gates, cracked walls and glass can open).</summary>
+        private static bool Passable(char c) => c != '#' && c != '=';
+
+        /// <summary>True if the world pixel lies in a room tile that can be passed (now or once opened).</summary>
+        public static bool OpenAt(int wx, int wy)
+        {
+            var r = AtWorld(wx, wy);
+            if (r == null) return false;
+            int tx = (wx - r.WorldX) / TileSize, ty = (wy - r.WorldY) / TileSize;
+            return Passable(r.Map[ty][tx]);
+        }
 
         /// <summary>Every open tile on a room's border must continue into an open tile of a neighbouring room.</summary>
         private static void CheckEdges()
@@ -124,7 +134,7 @@ namespace HolyPeak.World
                 }
                 for (int x = 0; x < r.Cols; x++)
                 {
-                    Check(r, x, 0, 0, -1);
+                    if (r.Prop("sky") == null) Check(r, x, 0, 0, -1);
                     Check(r, x, r.Rows - 1, 0, 1);
                 }
             }
@@ -137,7 +147,7 @@ namespace HolyPeak.World
             var n = AtWorld(wx, wy);
             if (n == null) { Problems.Add($"{r.Id}: open edge tile {tx},{ty} leads nowhere"); return; }
             int nx = (wx - n.WorldX) / TileSize, ny = (wy - n.WorldY) / TileSize;
-            if (!Passable(n.Map[ny][nx])) Problems.Add($"{r.Id}: open edge tile {tx},{ty} meets a wall in {n.Id}");
+            if (!Passable(n.Map[ny][nx]) && r.Prop("sky") == null) Problems.Add($"{r.Id}: open edge tile {tx},{ty} meets a wall in {n.Id}");
         }
 
         public static List<RoomDef> Parse(string text)

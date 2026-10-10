@@ -82,13 +82,19 @@ namespace HolyPeak.Gfx
                         for (int lx = 0; lx < 8; lx++)
                         {
                             int x = tx * 8 + lx, y = ty * 8 + ly;
-                            Color c = BackPixel(st, x, y, seed);
-                            // broken, soft edges where the wall meets open air
+                            bool house = st.Id == 0;
+                            Color c = house ? HousePixel(room, tx, ty, x, y, seed, lights) : BackPixel(st, x, y, seed);
+                            // broken, soft edges where the wall meets open air (houses get clean timber edges)
                             bool edgeL = !IsBackish(room, tx - 1, ty) && lx < 2;
                             bool edgeR = !IsBackish(room, tx + 1, ty) && lx > 5;
                             bool edgeU = !IsBackish(room, tx, ty - 1) && ly < 2;
                             bool edgeD = !IsBackish(room, tx, ty + 1) && ly > 5;
-                            if (edgeL || edgeR || edgeU || edgeD)
+                            if (house)
+                            {
+                                if ((edgeL && lx == 0) || (edgeR && lx == 7)) c = G.Hex(0x3a2418);
+                                else if (edgeL || edgeR) c = G.Hex(0x5a3a26);
+                            }
+                            else if (edgeL || edgeR || edgeU || edgeD)
                             {
                                 float h = Calc.Hash(x, y, seed + 7);
                                 if (h < 0.45f) continue;
@@ -556,6 +562,35 @@ namespace HolyPeak.Gfx
                 }
             }
             return G.Make(r.Width, r.Height, data);
+        }
+
+        /// <summary>Timber-framed plaster with warm lit windows, for the village houses.</summary>
+        private static Color HousePixel(Room room, int tx, int ty, int x, int y, int seed, List<Vector2> lights)
+        {
+            Color plaster = G.Hex(0xcdb894), plasterD = G.Hex(0xa8916e), timber = G.Hex(0x5a3a26), timberD = G.Hex(0x3a2418);
+            Color glass = G.Hex(0xffc86a), glassL = G.Hex(0xffe6a8), frame = G.Hex(0x2a1a12);
+            // find this wall's left edge and top so the pattern lines up with each house
+            int left = tx, top = ty;
+            while (left > 0 && room.TileAt(left - 1, ty) == Tile.Back) left--;
+            while (top > 0 && room.TileAt(tx, top - 1) == Tile.Back) top--;
+            int hx = x - left * 8, hy = y - top * 8;
+            int bay = Mod(hx, 20), row = Mod(hy, 18);
+            if (row < 2) return row == 0 ? timberD : timber;          // floor beams
+            if (bay < 2) return bay == 0 ? timberD : timber;          // posts
+            // a lit window in the middle of most bays
+            int wx = bay - 6, wy = row - 5;
+            bool lit = Calc.Hash(Floor(hx, 20) + left * 7, Floor(hy, 18) + top * 3, seed + 61) > 0.25f;
+            if (lit && wx >= 0 && wx < 8 && wy >= 0 && wy < 7)
+            {
+                if (wx == 4 && wy == 3) lights?.Add(new Vector2(x, y));
+                if (wx == 0 || wx == 7 || wy == 0 || wy == 6) return frame;
+                if (wx == 4 || wy == 3) return frame;
+                return wy < 3 && wx < 4 ? glassL : glass;
+            }
+            // diagonal braces in the bays without a window
+            if (!lit && (Mod(bay - row, 18) == 0 || Mod(bay + row, 18) == 0)) return timber;
+            float n = Calc.Fbm(x / 6f, y / 6f, 2, seed + 9);
+            return n > 0.62f ? plasterD : plaster;
         }
 
         private static bool IsBackish(Room room, int tx, int ty)

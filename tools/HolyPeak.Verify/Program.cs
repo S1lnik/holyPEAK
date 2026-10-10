@@ -9,193 +9,211 @@ using HolyPeak.World;
 namespace HolyPeak.Verify
 {
     /// <summary>
-    /// Proves every room in the game can be completed by searching over real simulation frames.
-    /// Any path found is an exact, replayable input sequence (the dedupe only prunes), so a
-    /// "SOLVED" result is a hard guarantee. Coarser input granularity (larger K) means the
-    /// solution needs less precise timing, which is a rough proxy for human difficulty.
+    /// Proves the mountain can be crossed: every route the design relies on (the critical path in
+    /// ability order, every secret and every shortcut) is searched over real simulation frames with
+    /// creatures disabled. A path found is an exact, replayable input sequence, so "OK" is a hard
+    /// guarantee. Checks marked as gates must FAIL: they prove an ability really is required.
     /// </summary>
     public static class Program
     {
         public static int Main(string[] args)
         {
-            string filter = null;
-            string replayDir = null;
-            int k = 4;
-            int maxNodes = 1_500_000;
-            bool embers = true;
-            bool ascii = false;
-            string pathDir = null;
+            string filter = null, replayDir = null, pathDir = null;
+            int k = 5, maxNodes = 1_200_000;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i])
                 {
-                    case "--room": filter = args[++i]; break;
+                    case "--only": filter = args[++i]; break;
                     case "--replays": replayDir = args[++i]; break;
+                    case "--paths": pathDir = args[++i]; break;
                     case "--k": k = int.Parse(args[++i]); break;
                     case "--max": maxNodes = int.Parse(args[++i]); break;
-                    case "--no-embers": embers = false; break;
-                    case "--ascii": ascii = true; break;
-                    case "--paths": pathDir = args[++i]; break;
                 }
             }
 
-            var rooms = Levels.All;
-            int failures = 0;
+            foreach (var p in Atlas.Problems) Console.WriteLine("WORLD: " + p);
+            int failures = Atlas.Problems.Count;
             var sw = Stopwatch.StartNew();
-            Console.WriteLine($"Verifying {rooms.Count} rooms ({Levels.EmberCount} embers), K={k}");
-            for (int idx = 0; idx < rooms.Count; idx++)
+            var checks = Checks.All();
+            Console.WriteLine($"{Atlas.Rooms.Count} rooms, {checks.Count} checks, K={k}");
+            foreach (var c in checks)
             {
-                var def = rooms[idx];
-                if (filter != null && !def.Id.StartsWith(filter)) continue;
-                bool dash = def.Chapter >= 1 && !RoomHasShrine(def);
-                var room = new Room(def, dash) { RecordEvents = false };
-                var solver = new Solver(room, k, maxNodes);
-
+                if (filter != null && !c.Name.Contains(filter) && !c.Room.StartsWith(filter)) continue;
                 var t0 = sw.Elapsed;
-                var start = room.Save();
-                var exitPath = solver.Solve(start, Goal.Exit, out var endSnap, out int nodes);
-                var dt = (sw.Elapsed - t0).TotalSeconds;
-                string res = exitPath != null
-                    ? $"exit OK  {exitPath.Count,5} frames ({exitPath.Count / 60f:0.0}s) nodes={nodes,8}"
-                    : $"exit FAIL nodes={nodes}";
-                if (exitPath == null) failures++;
-
-                string emberRes = "";
-                List<PlayerInput> emberPath = null;
-                if (embers && room.HasEmber)
-                {
-                    room.Load(start);
-                    emberPath = solver.Solve(start, Goal.EmberExit, out _, out int n1);
-                    if (emberPath != null) emberRes = $" | ember OK {emberPath.Count,5} frames nodes={n1}";
-                    else { emberRes = $" | ember FAIL ({n1})"; failures++; }
-                }
-                Console.WriteLine($"[{idx,2}] {def.Id,-5} {res}{emberRes}  ({dt:0.0}s)");
-
-                if (replayDir != null)
+                var room = c.Build();
+                var solver = new Solver(room, c, k, c.ExpectFail ? maxNodes / 4 : maxNodes);
+                var path = solver.Solve(out int nodes);
+                double dt = (sw.Elapsed - t0).TotalSeconds;
+                bool ok = c.ExpectFail ? path == null : path != null;
+                if (!ok) failures++;
+                string what = path != null ? $"{path.Count,5} frames ({path.Count / 60f:0.0}s)" : "no path   ";
+                Console.WriteLine($"{(ok ? "OK  " : "FAIL")} {c.Name,-44} {what} nodes={nodes,8} ({dt:0.0}s){(c.ExpectFail ? "  [gate]" : "")}");
+                if (path != null && replayDir != null)
                 {
                     Directory.CreateDirectory(replayDir);
-                    if (exitPath != null) WriteReplay(Path.Combine(replayDir, def.Id + ".txt"), exitPath);
-                    if (emberPath != null) WriteReplay(Path.Combine(replayDir, def.Id + "-ember.txt"), emberPath);
+                    WriteReplay(Path.Combine(replayDir, Safe(c.Name) + ".txt"), path);
                 }
-                if ((ascii || pathDir != null) && exitPath != null)
+                if (path != null && pathDir != null)
                 {
-                    var lines = PathOverlay(def, dash, emberPath ?? exitPath);
-                    if (ascii) foreach (var l in lines) Console.WriteLine("   " + l);
-                    if (pathDir != null) { Directory.CreateDirectory(pathDir); File.WriteAllLines(Path.Combine(pathDir, def.Id + ".txt"), lines); }
+                    Directory.CreateDirectory(pathDir);
+                    File.WriteAllLines(Path.Combine(pathDir, Safe(c.Name) + ".txt"), PathOverlay(c, path));
                 }
             }
-            Console.WriteLine(failures == 0 ? $"ALL ROOMS SOLVABLE ({sw.Elapsed.TotalSeconds:0.0}s)" : $"{failures} FAILURE(S)");
+            Console.WriteLine(failures == 0 ? $"ALL CHECKS PASS ({sw.Elapsed.TotalSeconds:0.0}s)" : $"{failures} FAILURE(S)");
             return failures == 0 ? 0 : 1;
         }
 
-        private static bool RoomHasShrine(RoomDef def) => def.Map.Any(r => r.Contains('G'));
+        private static string Safe(string s) => new string(s.Select(ch => char.IsLetterOrDigit(ch) || ch == '-' ? ch : '_').ToArray());
 
         private static void WriteReplay(string path, List<PlayerInput> inputs)
         {
             var sb = new StringBuilder();
             foreach (var i in inputs)
                 sb.Append(i.MoveX).Append(' ').Append(i.MoveY).Append(' ')
-                  .Append(i.Jump ? 1 : 0).Append(i.JumpPressed ? 1 : 0).Append(i.DashPressed ? 1 : 0).Append('\n');
+                  .Append(i.Jump ? 1 : 0).Append(i.JumpPressed ? 1 : 0).Append(i.StrikePressed ? 1 : 0)
+                  .Append(i.TollPressed ? 1 : 0).Append(i.Heal ? 1 : 0).Append(i.InteractPressed ? 1 : 0).Append('\n');
             File.WriteAllText(path, sb.ToString());
         }
 
-        private static List<string> PathOverlay(RoomDef def, bool dash, List<PlayerInput> inputs)
+        private static List<string> PathOverlay(Check c, List<PlayerInput> inputs)
         {
-            var room = new Room(def, dash) { RecordEvents = false };
-            var grid = def.Map.Select(r => r.ToCharArray()).ToArray();
+            var room = c.Build();
+            var grid = room.Def.Map.Select(r => r.ToCharArray()).ToArray();
             foreach (var inp in inputs)
             {
                 room.Update(inp, 1f / 60f);
-                var c = room.P.Center;
-                int tx = (int)(c.X / 8), ty = (int)(c.Y / 8);
-                if (ty >= 0 && ty < grid.Length && tx >= 0 && tx < grid[0].Length && (grid[ty][tx] == '.' || grid[ty][tx] == ':'))
-                    grid[ty][tx] = room.P.State == PState.Dash ? '*' : 'o';
+                var p = room.P.Center;
+                int tx = (int)(p.X / 8), ty = (int)(p.Y / 8);
+                if (ty >= 0 && ty < grid.Length && tx >= 0 && tx < grid[0].Length && (grid[ty][tx] == '.' || grid[ty][tx] == ':' || grid[ty][tx] == 'u'))
+                    grid[ty][tx] = room.P.Gliding ? '~' : (room.P.Clinging ? '|' : 'o');
             }
             return grid.Select(r => new string(r)).ToList();
         }
     }
 
-    public enum Goal { Exit, EmberExit }
+    public enum GoalKind { Exit, Touch, Flag }
+
+    public sealed class Check
+    {
+        public string Name, Room;
+        public int StartX, StartY;          // tile whose bottom the pilgrim's feet rest on
+        public float Vx, Vy;
+        public Abilities Ab;
+        public string[] Flags = Array.Empty<string>();
+        public GoalKind Goal;
+        public int Side;                    // exit: 1 up, 2 left, 3 right, 4 down
+        public int A0 = int.MinValue, A1 = int.MaxValue;   // exit: tile range along the edge
+        public int Gx0, Gy0, Gx1, Gy1;      // touch: tile rect
+        public string GoalFlag;
+        public bool ExpectFail;
+
+        public Room Build()
+        {
+            var def = Atlas.Get(Room) ?? throw new InvalidOperationException("no room " + Room);
+            var flags = new HashSet<string>(Flags);
+            var room = new HolyPeak.World.Room(def, flags, noEnemies: true) { RecordEvents = false };
+            var p = new PlayerSim();
+            p.Spawn(new Microsoft.Xna.Framework.Point(StartX * 8 + 1, StartY * 8 + 8 - PlayerSim.H), Vx < 0 ? -1 : 1);
+            p.Hp = p.MaxHp = 5; p.Damage = 2; p.Ab = Ab;
+            p.Speed = new Microsoft.Xna.Framework.Vector2(Vx, Vy);
+            p.OnGround = Vy == 0;
+            room.P = p;
+            return room;
+        }
+    }
 
     public sealed class Solver
     {
         private readonly Room _room;
-        private readonly int _k;
-        private readonly int _maxNodes;
-        private readonly int[] _distExit;
-        private readonly int[] _distEmber;
-        private readonly bool _timeMatters;
+        private readonly Check _c;
+        private readonly int _k, _maxNodes;
+        private readonly int[] _dist;
+        private readonly Act[] _acts;
+        private readonly bool _hasResonance;
 
         private struct Act
         {
             public sbyte Mx, My;
-            public byte Jump; // 0 none, 1 press, 2 hold
-            public bool Dash;
-        }
-
-        private static readonly Act[] Acts = BuildActs();
-
-        private static Act[] BuildActs()
-        {
-            var list = new List<Act>();
-            for (sbyte mx = -1; mx <= 1; mx++)
-                for (byte j = 0; j <= 2; j++)
-                    list.Add(new Act { Mx = mx, Jump = j });
-            for (sbyte mx = -1; mx <= 1; mx++)
-                for (sbyte my = -1; my <= 1; my++)
-                {
-                    if (mx == 0 && my == 0) continue;
-                    list.Add(new Act { Mx = mx, My = my, Dash = true });
-                }
-            // fast-fall / drop
-            list.Add(new Act { Mx = 0, My = 1 });
-            return list.ToArray();
+            public byte Jump;      // 0 none, 1 press then hold, 2 hold
+            public bool Strike, Toll, Up;
         }
 
         private sealed class Node
         {
             public Room.Snapshot S;
             public Node Parent;
-            public int Act;
-            public int G;
+            public int Act, G;
         }
 
-        public Solver(Room room, int k, int maxNodes)
+        public Solver(Room room, Check c, int k, int maxNodes)
         {
             _room = room;
+            _c = c;
             _k = k;
             _maxNodes = maxNodes;
-            _timeMatters = room.Pulses.Length > 0 || (room.Def.Wind != 0 && room.Def.WindPeriod > 0);
-            _distExit = Bfs(room, exit: true);
-            _distEmber = room.HasEmber ? Bfs(room, exit: false) : null;
+            _hasResonance = room.Groups.Any(g => g.Kind == Tile.Resonance);
+            var acts = new List<Act>();
+            for (sbyte mx = -1; mx <= 1; mx++)
+                for (byte j = 0; j <= 2; j++)
+                    acts.Add(new Act { Mx = mx, Jump = j });
+            bool thorns = room.Tiles.Any(HolyPeak.World.Room.IsThorn);
+            bool platforms = room.Tiles.Any(t => t == Tile.Platform);
+            bool walls = room.Groups.Any(g => g.Kind == Tile.Breakable) || room.Things.Any(t => t.Kind == ThingKind.Lever || t.Kind == ThingKind.Cache);
+            if (c.Ab.HasFlag(Abilities.Bell))
+                for (sbyte mx = -1; mx <= 1; mx++)
+                {
+                    acts.Add(new Act { Mx = mx, Jump = 2, Toll = true });
+                    acts.Add(new Act { Mx = mx, Jump = 0, Toll = true });
+                }
+            if (thorns)
+                for (sbyte mx = -1; mx <= 1; mx++) acts.Add(new Act { Mx = mx, My = 1, Strike = true, Jump = 2 });
+            if (walls)
+                for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, Strike = true });
+            if (walls) acts.Add(new Act { My = -1, Strike = true });
+            if (platforms) acts.Add(new Act { My = 1, Jump = 1 });
+            _acts = acts.ToArray();
+            _dist = Bfs();
         }
 
-        private static int[] Bfs(Room room, bool exit)
+        /// <summary>Tile distance to the goal through anything that is not permanent terrain.</summary>
+        private int[] Bfs()
         {
-            int cols = room.Cols, rows = room.Rows;
+            int cols = _room.Cols, rows = _room.Rows;
             var dist = Enumerable.Repeat(int.MaxValue, cols * rows).ToArray();
             var q = new Queue<int>();
-            bool Passable(int tx, int ty) => !Room.IsSolidTile(room.TileAt(tx, ty));
-            if (exit)
+            bool Passable(int tx, int ty) => !HolyPeak.World.Room.IsSolidTile(_room.TileAt(tx, ty));
+            void Seed(int tx, int ty)
             {
-                var ex = room.Def.Exits;
-                if ((ex & ExitSide.Top) != 0)
-                    for (int tx = 0; tx < cols; tx++) if (Passable(tx, 0)) { dist[tx] = 0; q.Enqueue(tx); }
-                for (int ty = 0; ty < rows; ty++)
-                {
-                    if ((ex & ExitSide.Left) != 0 && Passable(0, ty)) { dist[ty * cols] = 0; q.Enqueue(ty * cols); }
-                    if ((ex & ExitSide.Right) != 0 && Passable(cols - 1, ty)) { dist[ty * cols + cols - 1] = 0; q.Enqueue(ty * cols + cols - 1); }
-                }
-                if (room.HasBell)
-                {
-                    int bi = (room.BellRect.Center.Y / 8) * cols + room.BellRect.Center.X / 8;
-                    dist[bi] = 0; q.Enqueue(bi);
-                }
+                if (tx < 0 || ty < 0 || tx >= cols || ty >= rows || !Passable(tx, ty)) return;
+                int i = ty * cols + tx;
+                if (dist[i] == 0) return;
+                dist[i] = 0; q.Enqueue(i);
             }
-            else
+            switch (_c.Goal)
             {
-                int ei = ((int)room.Ember.Y / 8) * cols + (int)room.Ember.X / 8;
-                dist[ei] = 0; q.Enqueue(ei);
+                case GoalKind.Exit:
+                {
+                    // only edge tiles that really continue into the neighbouring room
+                    var d = _room.Def;
+                    if (_c.Side == 1 || _c.Side == 4)
+                        for (int tx = Math.Max(0, _c.A0); tx <= Math.Min(cols - 1, _c.A1); tx++)
+                        {
+                            int wy = _c.Side == 1 ? d.WorldY - 4 : d.WorldY + rows * 8 + 4;
+                            if (Atlas.OpenAt(d.WorldX + tx * 8 + 4, wy)) Seed(tx, _c.Side == 1 ? 0 : rows - 1);
+                        }
+                    else
+                        for (int ty = Math.Max(0, _c.A0); ty <= Math.Min(rows - 1, _c.A1); ty++)
+                        {
+                            int wx = _c.Side == 2 ? d.WorldX - 4 : d.WorldX + cols * 8 + 4;
+                            if (Atlas.OpenAt(wx, d.WorldY + ty * 8 + 4)) Seed(_c.Side == 2 ? 0 : cols - 1, ty);
+                        }
+                    break;
+                }
+                default:
+                    for (int ty = _c.Gy0; ty <= _c.Gy1; ty++)
+                        for (int tx = _c.Gx0; tx <= _c.Gx1; tx++) Seed(tx, ty);
+                    break;
             }
             while (q.Count > 0)
             {
@@ -214,27 +232,42 @@ namespace HolyPeak.Verify
             return dist;
         }
 
-        private int H(Goal goal)
+        private int H()
         {
             var c = _room.P.Center;
             int tx = Math.Clamp((int)(c.X / 8), 0, _room.Cols - 1);
             int ty = Math.Clamp((int)(c.Y / 8), 0, _room.Rows - 1);
-            int i = ty * _room.Cols + tx;
-            if (goal == Goal.EmberExit && _room.Ember.State == 0)
-            {
-                int ei = ((int)_room.Ember.Y / 8) * _room.Cols + (int)_room.Ember.X / 8;
-                int a = _distEmber[i], b = _distExit[ei];
-                return a == int.MaxValue || b == int.MaxValue ? 999 : a + b;
-            }
-            int v = _distExit[i];
+            int v = _dist[ty * _room.Cols + tx];
             return v == int.MaxValue ? 999 : v;
         }
 
-        private bool Reached(Goal goal)
+        private bool Reached()
         {
-            bool exited = _room.Exited || _room.BellRung;
-            if (goal == Goal.Exit) return exited;
-            return exited && _room.Ember.State == 1;
+            switch (_c.Goal)
+            {
+                case GoalKind.Exit:
+                {
+                    if (!_room.Exited || _room.ExitDir != _c.Side) return false;
+                    var p = _room.P.Center;
+                    int a = _c.Side == 1 || _c.Side == 4 ? (int)(p.X / 8) : (int)(p.Y / 8);
+                    return a >= (long)_c.A0 - 1 && a <= (long)_c.A1 + 1;
+                }
+                case GoalKind.Touch:
+                {
+                    var r = new Microsoft.Xna.Framework.Rectangle(_c.Gx0 * 8, _c.Gy0 * 8, (_c.Gx1 - _c.Gx0 + 1) * 8, (_c.Gy1 - _c.Gy0 + 1) * 8);
+                    return r.Intersects(_room.P.Hitbox);
+                }
+                default:
+                    return _room.Flags.Contains(_c.GoalFlag);
+            }
+        }
+
+        private bool Failed()
+        {
+            var p = _room.P;
+            if (p.State != PState.Normal || _room.HazardPending || p.Hp < p.MaxHp) return true;
+            if (_room.Exited && !(_c.Goal == GoalKind.Exit && Reached())) return true;
+            return false;
         }
 
         private long Key()
@@ -243,65 +276,53 @@ namespace HolyPeak.Verify
             long h = 1469598103934665603L;
             void Mix(long v) { h ^= v; h *= 1099511628211L; }
             Mix(p.X); Mix(p.Y);
-            Mix((long)MathF.Round(p.Speed.X / 20f));
-            Mix((long)MathF.Round(p.Speed.Y / 20f));
-            Mix((long)p.State);
-            Mix(p.Dashes);
-            Mix(p.VarJumpTimer > 0 ? 1 : 0);
-            Mix(p.ForceMoveXTimer > 0 ? 1 : 0);
-            Mix((long)(Math.Max(0, p.DashTimer) / 0.05f));
-            Mix(p.DashAbility ? 1 : 0);
-            for (int i = 0; i < _room.Crumbles.Length; i++) Mix(_room.Crumbles[i].State);
-            for (int i = 0; i < _room.Crystals.Length; i++) Mix(_room.Crystals[i].Active ? 1 : 0);
-            Mix(_room.HasEmber ? _room.Ember.State : 0);
-            if (_timeMatters)
+            Mix((long)MathF.Round(p.Speed.X / 24f));
+            Mix((long)MathF.Round(p.Speed.Y / 24f));
+            Mix((p.OnGround ? 1 : 0) | (p.Clinging ? 2 : 0) | (p.Gliding ? 4 : 0) | (p.AirToll ? 8 : 0) | (p.Rising ? 16 : 0)
+                | (p.ForceMoveTimer > 0 ? 32 : 0) | (p.DropT > 0 ? 64 : 0) | (p.TollCooldownT > 0 ? 128 : 0) | (p.Attack != Strike.None ? 256 : 0));
+            if (p.Clinging) Mix((long)(Math.Min(p.ClingTimer, 0.4f) / 0.1f));
+            for (int i = 0; i < _room.Groups.Length; i++)
             {
-                float period = _room.Pulses.Length > 0 ? _room.Def.PulsePhase * 2 : _room.Def.WindPeriod;
-                Mix((long)((_room.Time % period) / 0.1f));
+                var g = _room.Groups[i];
+                Mix(g.Gone ? 1 : 0);
+                if (g.Kind == Tile.Resonance) Mix((long)(g.Timer / 0.25f) * 2 + (g.Pending ? 1 : 0));
+                if (g.Kind == Tile.Breakable) Mix(g.Hp);
             }
+            for (int i = 0; i < _room.Things.Length; i++) Mix(_room.Things[i].Used ? 1 : 0);
             return h;
         }
 
-        public List<PlayerInput> Solve(Room.Snapshot start, Goal goal, out Room.Snapshot end, out int expanded)
+        public List<PlayerInput> Solve(out int expanded)
         {
-            end = null;
             expanded = 0;
+            var start = _room.Save();
             var open = new PriorityQueue<Node, int>();
             var seen = new HashSet<long>();
-            _room.Load(start);
             seen.Add(Key());
-            open.Enqueue(new Node { S = start, Act = -1, G = 0 }, H(goal) * 9);
+            open.Enqueue(new Node { S = start, Act = -1 }, H() * 8);
             const float dt = 1f / 60f;
-
             while (open.Count > 0 && expanded < _maxNodes)
             {
                 var node = open.Dequeue();
                 expanded++;
-                for (int a = 0; a < Acts.Length; a++)
+                for (int a = 0; a < _acts.Length; a++)
                 {
-                    var act = Acts[a];
+                    var act = _acts[a];
                     _room.Load(node.S);
-                    if (act.Dash && !_room.P.CanDash) continue;
-                    bool dead = false, done = false;
+                    if (act.Toll && _room.P.TollCooldownT > 0) continue;
+                    bool fail = false, done = false;
                     for (int f = 0; f < _k; f++)
                     {
-                        var inp = MakeInput(act, f);
-                        _room.Update(inp, dt);
-                        if (_room.P.State == PState.Dead) { dead = true; break; }
-                        if (Reached(goal)) { done = true; break; }
-                        if (_room.Exited || _room.BellRung) { dead = true; break; } // left without the ember
+                        _room.Update(MakeInput(act, f), dt);
+                        if (Reached()) { done = true; break; }
+                        if (Failed()) { fail = true; break; }
                     }
-                    if (dead) continue;
+                    if (fail) continue;
                     var child = new Node { Parent = node, Act = a, G = node.G + _k };
-                    if (done)
-                    {
-                        child.S = _room.Save();
-                        end = child.S;
-                        return Reconstruct(child, start, goal);
-                    }
+                    if (done) return Reconstruct(child, start);
                     if (!seen.Add(Key())) continue;
                     child.S = _room.Save();
-                    open.Enqueue(child, child.G + H(goal) * 9);
+                    open.Enqueue(child, child.G + H() * 8);
                 }
             }
             return null;
@@ -313,27 +334,26 @@ namespace HolyPeak.Verify
             MoveY = act.My,
             Jump = act.Jump != 0,
             JumpPressed = act.Jump == 1 && f == 0,
-            DashPressed = act.Dash && f == 0,
+            StrikePressed = act.Strike && f == 0,
+            TollPressed = act.Toll && f == 0,
+            InteractPressed = act.Up && f == 0,
         };
 
-        private List<PlayerInput> Reconstruct(Node end, Room.Snapshot start, Goal goal)
+        private List<PlayerInput> Reconstruct(Node end, Room.Snapshot start)
         {
             var acts = new List<int>();
             for (var n = end; n.Parent != null; n = n.Parent) acts.Add(n.Act);
             acts.Reverse();
-            // Re-simulate to trim the final macro to the exact frame the goal was reached.
             var inputs = new List<PlayerInput>();
             _room.Load(start);
             foreach (int a in acts)
-            {
                 for (int f = 0; f < _k; f++)
                 {
-                    var inp = MakeInput(Acts[a], f);
+                    var inp = MakeInput(_acts[a], f);
                     inputs.Add(inp);
                     _room.Update(inp, 1f / 60f);
-                    if (Reached(goal)) return inputs;
+                    if (Reached()) return inputs;
                 }
-            }
             return inputs;
         }
     }

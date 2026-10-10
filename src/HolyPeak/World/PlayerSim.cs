@@ -79,6 +79,7 @@ namespace HolyPeak.World
         public float HealT;
         public int SafeX, SafeY;
         public float AirTime;
+        public float DropT;                 // falling through a one-way platform
 
         public Rectangle Hitbox => new Rectangle(X, Y, W, H);
         public Vector2 Center => new Vector2(X + W / 2f, Y + H / 2f);
@@ -109,7 +110,7 @@ namespace HolyPeak.World
             State = PState.Normal;
             Coyote = JumpBuffer = StrikeBufferT = 0;
             Rising = Clinging = Gliding = InUpdraft = Healing = false;
-            ClingTimer = ForceMoveTimer = TollCooldownT = AttackT = AttackCooldownT = Invuln = StunT = HealT = AirTime = 0;
+            ClingTimer = ForceMoveTimer = TollCooldownT = AttackT = AttackCooldownT = Invuln = StunT = HealT = AirTime = DropT = 0;
             Attack = Strike.None;
             AirToll = true;
             OnGround = true;
@@ -126,8 +127,8 @@ namespace HolyPeak.World
             AttackCooldownT -= dt;
             if (Invuln > 0) Invuln -= dt;
 
-            bool wasGround = OnGround;
-            OnGround = Speed.Y >= 0 && room.SolidOrPlatformBelow(X, Y, W, H);
+            if (DropT > 0) DropT -= dt;
+            OnGround = Speed.Y >= 0 && (room.SolidAt(X, Y + 1, W, H) || (DropT <= 0 && room.PlatformTopAt(X, Y + H, W)));
             if (OnGround)
             {
                 Coyote = CoyoteTime;
@@ -284,6 +285,16 @@ namespace HolyPeak.World
         private void UpdateJump(Room room, in PlayerInput inp)
         {
             if (JumpBuffer <= 0 || Healing) return;
+            // Down + jump on a one-way platform drops through it.
+            if (OnGround && inp.MoveY > 0 && !room.SolidAt(X, Y + 1, W, H) && room.PlatformTopAt(X, Y + H, W))
+            {
+                JumpBuffer = 0; Coyote = 0;
+                DropT = 0.2f;
+                OnGround = false;
+                Y += 1;
+                Speed.Y = Math.Max(Speed.Y, 40f);
+                return;
+            }
             if (Coyote > 0 && !Clinging)
             {
                 JumpBuffer = 0; Coyote = 0;
@@ -444,7 +455,7 @@ namespace HolyPeak.World
             {
                 bool blocked = sign < 0
                     ? room.SolidAt(X, Y - 1, W, H)
-                    : room.SolidAt(X, Y + 1, W, H) || room.PlatformTopAt(X, Y + H, W);
+                    : room.SolidAt(X, Y + 1, W, H) || (DropT <= 0 && room.PlatformTopAt(X, Y + H, W));
                 if (!blocked)
                 {
                     Y += sign; move -= sign;
