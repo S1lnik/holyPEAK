@@ -53,7 +53,12 @@ Button prompts switch automatically between keyboard and gamepad.
 - An assist mode offers game speed from 50 to 100%, infinite dash and invincibility.
 - Every room is proven beatable. A built-in solver searches the real game physics, and the game has been played start to finish with the solver's inputs.
 
-## Running
+## Download
+
+Ready-to-play builds for Windows, macOS (Apple Silicon and Intel) and Linux are on the [Releases page](../../releases).
+Nothing needs installing: unzip and play. Each download includes a `README.txt` with first-launch notes for unsigned apps.
+
+## Running from source
 
 You need the [.NET 8 SDK](https://dotnet.microsoft.com/download).
 
@@ -65,13 +70,15 @@ On the first launch the soundtrack renders in the background, which takes a few 
 Saves and settings live in a `HolyPeak` folder inside your user application-data folder (for example `%APPDATA%\HolyPeak` on Windows or `~/.config/HolyPeak` on Linux).
 Set `HOLYPEAK_DATA` to use a different folder.
 
-### Building a standalone copy
+### Building release packages
 
 ```sh
-dotnet publish src/HolyPeak -c Release -r win-x64   --self-contained -o dist/win-x64
-dotnet publish src/HolyPeak -c Release -r linux-x64 --self-contained -o dist/linux-x64
-dotnet publish src/HolyPeak -c Release -r osx-arm64 --self-contained -o dist/osx-arm64
+build/package.sh 1.0.0                      # all platforms, written to dist/
+build/package.sh 1.0.0 win-x64 linux-x64    # or just some
 ```
+
+This produces a Windows zip, a Linux tarball and macOS `.app` bundles. The `.app` bundles are ad-hoc signed when built on a Mac, which Apple Silicon requires.
+The [Release workflow](.github/workflows/release.yml) runs the same script on GitHub Actions and publishes the result. Start it from the Actions tab, or push a `v*` tag.
 
 MonoGame's DesktopGL runtime bundles SDL2 and OpenAL, so nothing else needs installing.
 If the machine has no audio device, the game runs silently instead of failing.

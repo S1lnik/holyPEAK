@@ -1,0 +1,35 @@
+HOLY PEAK - a pilgrimage in four chapters
+==========================================
+
+Starting the game
+-----------------
+Windows : open the HolyPeak folder and run HolyPeak.exe.
+          If SmartScreen says "Windows protected your PC", click
+          "More info" and then "Run anyway" (the game is not code-signed).
+macOS   : drag "Holy Peak.app" anywhere (e.g. Applications) and open it.
+          The first time, right-click the app and choose Open, then Open
+          again (the game is not notarized by Apple). If macOS still refuses,
+          run this once in Terminal:
+              xattr -dr com.apple.quarantine "/Applications/Holy Peak.app"
+Linux   : extract the archive and run ./HolyPeak inside the HolyPeak folder.
+
+No installation or .NET runtime is needed. On the very first launch the
+soundtrack is generated in the background, which takes a few seconds; after
+that it is cached.
+
+Controls
+--------
+                Keyboard                 Gamepad
+Move / aim      Arrow keys or WASD       Left stick / D-pad
+Jump            C, Space or J            A
+Dash            X, Shift or K            X, B, RB or RT
+Pause           Esc or Enter             Start
+Restart room    R                        Back
+Fullscreen      F11
+
+Hold jump to jump higher; tap it for a short hop. Jump while sliding down a
+wall to wall jump. Your scarf is red while your dash is ready.
+
+Assist options (game speed, infinite dash, invincibility) are in Options.
+Saves are written automatically to a "HolyPeak" folder in your user
+application-data folder.

@@ -1,0 +1,90 @@
+name: Release
+
+# Builds Holy Peak for Windows, Linux and macOS and publishes a GitHub release.
+# Run it from the Actions tab (choose a version) or push a tag like v1.0.1.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (without the leading v)"
+        required: true
+        default: "1.0.0"
+  push:
+    tags: ["v*"]
+
+env:
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  verify:
+    name: Prove every room is beatable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet build HolyPeak.sln -c Release
+      - run: dotnet run --project tools/HolyPeak.Verify -c Release --no-build
+
+  build-win-linux:
+    name: Build Windows and Linux
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: build/package.sh "${VERSION#v}" win-x64 linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-win-linux
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS
+    needs: verify
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: build/package.sh "${VERSION#v}" osx-arm64 osx-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-macos
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [build-win-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/* --clobber
+          else
+            gh release create "$VERSION" dist/* \
+              --title "Holy Peak ${VERSION#v}" \
+              --notes-file .github/RELEASE_NOTES.md \
+              --target "$GITHUB_SHA"
+          fi
