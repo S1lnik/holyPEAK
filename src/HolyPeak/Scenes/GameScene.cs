@@ -189,33 +189,15 @@ namespace HolyPeak.Scenes
         {
             var carry = _room?.P ?? _carry;
             _wr?.Dispose();
-            _room = new Room(def, _flags)
+            _room = new Room(def, _flags, noEnemies: Game.Auto?.Peaceful == true)
             {
                 Invincible = Cfg.Invincible,
                 EmberCharm = _flags.Contains("bought:charm"),
             };
             if (Save.ShadeRoom == def.Id && Save.ShadeEmbers > 0) _room.AddShade(Save.ShadeX, Save.ShadeY);
-
-            var p = carry;
-            p.Spawn(Point.Zero, carry.Facing);
-            p.Hp = carry.Hp; p.MaxHp = carry.MaxHp; p.Flasks = carry.Flasks; p.MaxFlasks = carry.MaxFlasks;
-            p.Damage = carry.Damage; p.Ab = carry.Ab; p.Invuln = carry.Invuln; p.State = PState.Normal;
-            if (local.HasValue)
-            {
-                p.X = (int)MathF.Round(local.Value.X); p.Y = (int)MathF.Round(local.Value.Y);
-                p.Speed = speed ?? Vector2.Zero;
-                p.OnGround = false;
-                p.AirToll = carry.AirToll;
-            }
-            else
-            {
-                var at = spawnAt.HasValue ? _room.SpawnAtThing(spawnAt.Value) : (_room.StartPoint ?? _room.SpawnAtThing(ThingKind.Shrine));
-                p.X = at.X; p.Y = at.Y;
-            }
-            p.SafeX = p.X; p.SafeY = p.Y;
-            _room.P = p;
-            Unstick();
-            if (!local.HasValue || !_room.IsSafeGround(_room.P.X, _room.P.Y)) { _room.P.SafeX = _room.P.X; _room.P.SafeY = _room.P.Y; }
+            Point? spawn = null;
+            if (!local.HasValue) spawn = spawnAt.HasValue ? _room.SpawnAtThing(spawnAt.Value) : (_room.StartPoint ?? _room.SpawnAtThing(ThingKind.Shrine));
+            Travel.Arrive(_room, carry, local, speed ?? Vector2.Zero, spawn);
 
             var region = Atlas.Region(def.Region);
             bool newRegion = _region != region;
@@ -238,20 +220,6 @@ namespace HolyPeak.Scenes
             if (!Save.Visited.Contains(def.Id)) Save.Visited.Add(def.Id);
             Save.Room = def.Id;
             if (Game.Auto != null) Console.WriteLine($"[auto] room {def.Id} ({region.Id}) hp {_room.P.Hp}/{_room.P.MaxHp} embers {Save.Embers}");
-        }
-
-        /// <summary>If the pilgrim arrives inside something solid, move to the nearest free spot.</summary>
-        private void Unstick()
-        {
-            ref var p = ref _room.P;
-            if (!_room.SolidAt(p.X, p.Y, PlayerSim.W, PlayerSim.H)) return;
-            for (int r = 1; r <= 24; r++)
-                for (int dy = -r; dy <= r; dy++)
-                    for (int dx = -r; dx <= r; dx++)
-                    {
-                        if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != r) continue;
-                        if (!_room.SolidAt(p.X + dx, p.Y + dy, PlayerSim.W, PlayerSim.H)) { p.X += dx; p.Y += dy; return; }
-                    }
         }
 
         private void ShowAreaCard()
@@ -459,19 +427,8 @@ namespace HolyPeak.Scenes
 
         private void StartTransition()
         {
-            var p = _room.P;
-            var def = _room.Def;
-            var worldCenter = new Vector2(def.WorldX + p.X + PlayerSim.W / 2f, def.WorldY + p.Y + PlayerSim.H / 2f);
-            var next = Atlas.AtWorld((int)MathF.Floor(worldCenter.X), (int)MathF.Floor(worldCenter.Y));
+            var next = Travel.Next(_room, out var local, out var speed);
             if (next == null) { _room.Exited = false; return; }
-            int dir = _room.ExitDir;
-            var speed = p.Speed;
-            if (dir == 1) speed.Y = Math.Min(speed.Y, -265f);   // a boost up through the floor of the room above
-            var local = new Vector2(def.WorldX + p.X - next.WorldX, def.WorldY + p.Y - next.WorldY);
-            if (dir == 2) local.X = Math.Min(local.X, next.Cols * 8 - PlayerSim.W - 1);
-            if (dir == 3) local.X = Math.Max(local.X, 1);
-            if (dir == 1) local.Y = Math.Min(local.Y, next.Rows * 8 - PlayerSim.H - 1);
-            if (dir == 4) local.Y = Math.Max(local.Y, 1);
             _phase = Phase.Fading;
             AudioManager.Play("whoosh", 0.22f);
             FadeThrough(0.1f, () =>

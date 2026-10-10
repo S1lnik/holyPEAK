@@ -422,9 +422,9 @@ namespace HolyPeak.Scenes
                 float a = _bossBarA;
                 float frac = b.HpFraction;
                 _bossTrail = frac > _bossTrail ? frac : Calc.Approach(_bossTrail, frac, 1 / 60f * 0.4f);
-                float bw = 200, bx = (G.ViewW - bw) / 2, by = G.ViewH - 12;
-                for (int i = 0; i < 26; i++) G.Rect(sb, 0, G.ViewH - 26 + i, G.ViewW, 1, Color.Black * (0.55f * a * i / 26f));
-                font.DrawCentered(sb, b.Name, new Vector2(G.ViewW / 2f, by - 11), Color.White * a, Color.Black * a);
+                float bw = 180, bx = (G.ViewW - bw) / 2, by = 15;
+                for (int i = 0; i < 26; i++) G.Rect(sb, 0, i, G.ViewW, 1, Color.Black * (0.5f * a * (1 - i / 26f)));
+                font.DrawCentered(sb, b.Name, new Vector2(G.ViewW / 2f, 3), G.Hex(0xffe8c0) * a, Color.Black * a);
                 G.Rect(sb, bx - 1, by - 1, bw + 2, 6, Color.Black * (0.8f * a));
                 G.Rect(sb, bx, by, bw * _bossTrail, 4, G.Hex(0xffe8c0) * (0.6f * a));
                 G.Rect(sb, bx, by, bw * frac, 4, G.Hex(0xd8443c) * a);
@@ -457,7 +457,7 @@ namespace HolyPeak.Scenes
         private void DrawToasts(SpriteBatch sb)
         {
             var font = G.Font;
-            float y = 8;
+            float y = _bossBarA > 0.1f ? 28 : 8;
             foreach (var (text, color, t) in _toasts)
             {
                 float a = Calc.Clamp01(t / 0.3f) * Calc.Clamp01((3.2f - t) / 0.6f);
@@ -627,7 +627,10 @@ namespace HolyPeak.Scenes
         {
             var font = G.Font;
             float a = _overlayA;
-            G.Rect(sb, 0, 0, G.ViewW, G.ViewH, new Color(8, 8, 18) * (0.92f * a));
+            G.Rect(sb, 0, 0, G.ViewW, G.ViewH, new Color(10, 10, 22) * a);
+            for (int y = 0; y < G.ViewH; y += 3)
+                for (int x = (y / 3) % 2 * 3; x < G.ViewW; x += 6) G.Rect(sb, x, y, 1, 1, new Color(40, 40, 70) * (0.5f * a));
+            sb.Draw(G.Vignette, new Rectangle(0, 0, G.ViewW, G.ViewH), Color.White * a);
             int cw = Atlas.MaxCellX - Atlas.MinCellX + 1, ch = Atlas.MaxCellY - Atlas.MinCellY + 1;
             float ox = MathF.Round((G.ViewW - cw * MapCellW) / 2f), oy = MathF.Round((G.ViewH - ch * MapCellH) / 2f) + 4;
             bool surveyed = _flags.Contains("bought:map");

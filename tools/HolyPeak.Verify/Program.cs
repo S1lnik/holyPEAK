@@ -29,6 +29,7 @@ namespace HolyPeak.Verify
                     case "--paths": pathDir = args[++i]; break;
                     case "--k": k = int.Parse(args[++i]); break;
                     case "--max": maxNodes = int.Parse(args[++i]); break;
+                    case "--walk": return Walker.Run(args[++i], k, maxNodes);
                 }
             }
 
@@ -66,7 +67,7 @@ namespace HolyPeak.Verify
 
         private static string Safe(string s) => new string(s.Select(ch => char.IsLetterOrDigit(ch) || ch == '-' ? ch : '_').ToArray());
 
-        private static void WriteReplay(string path, List<PlayerInput> inputs)
+        internal static void WriteReplay(string path, List<PlayerInput> inputs)
         {
             var sb = new StringBuilder();
             foreach (var i in inputs)
@@ -92,7 +93,7 @@ namespace HolyPeak.Verify
         }
     }
 
-    public enum GoalKind { Exit, Touch, Flag }
+    public enum GoalKind { Exit, Touch, Flag, Bell }
 
     public sealed class Check
     {
@@ -171,6 +172,7 @@ namespace HolyPeak.Verify
             if (walls)
                 for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, Strike = true });
             if (walls) acts.Add(new Act { My = -1, Strike = true });
+            if (room.Things.Any(t => t.Kind == ThingKind.Altar || t.Kind == ThingKind.GreatBell)) acts.Add(new Act { Up = true });
             if (platforms) acts.Add(new Act { My = 1, Jump = 1 });
             _acts = acts.ToArray();
             _dist = Bfs();
@@ -210,9 +212,15 @@ namespace HolyPeak.Verify
                         }
                     break;
                 }
-                default:
+                case GoalKind.Touch:
                     for (int ty = _c.Gy0; ty <= _c.Gy1; ty++)
                         for (int tx = _c.Gx0; tx <= _c.Gx1; tx++) Seed(tx, ty);
+                    break;
+                default:
+                    // flags and the bell: head for the altar, lever or bell
+                    foreach (var t in _room.Things)
+                        if (t.Kind == ThingKind.Altar || t.Kind == ThingKind.Lever || t.Kind == ThingKind.GreatBell)
+                            Seed(t.X / 8, (t.Y - 1) / 8);
                     break;
             }
             while (q.Count > 0)
@@ -257,6 +265,8 @@ namespace HolyPeak.Verify
                     var r = new Microsoft.Xna.Framework.Rectangle(_c.Gx0 * 8, _c.Gy0 * 8, (_c.Gx1 - _c.Gx0 + 1) * 8, (_c.Gy1 - _c.Gy0 + 1) * 8);
                     return r.Intersects(_room.P.Hitbox);
                 }
+                case GoalKind.Bell:
+                    return _room.NearThing >= 0 && _room.Things[_room.NearThing].Kind == ThingKind.GreatBell && _room.P.OnGround;
                 default:
                     return _room.Flags.Contains(_c.GoalFlag);
             }

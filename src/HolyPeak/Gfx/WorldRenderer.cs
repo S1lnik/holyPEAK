@@ -512,7 +512,7 @@ namespace HolyPeak.Gfx
             float shake = (k.DashTelling || k.Crouching || k.TollRaising) ? 1 : 0;
             if (k.Crouching) feet.Y += 2;
             // hammer: handle from the hand, head at the end
-            var hand = feet + new Vector2(f * 10, -22);
+            var hand = feet + new Vector2(f * 11, -24);
             float ang;
             if (k.Raising || k.TollRaising) ang = -1.9f;
             else if (k.Slamming) ang = 0.9f;
@@ -770,6 +770,7 @@ namespace HolyPeak.Gfx
                         G.GlowAt(sb, new Vector2(a.X + a.Facing * 1, a.Y - 22), 6, G.Hex(0xb8f0ff) * (0.5f * a.Alpha));
                         break;
                     case Bellkeeper k:
+                        G.GlowAt(sb, new Vector2(k.X + k.Facing * 1, k.Y - 35), 8, G.Hex(0xfff6d0) * 0.5f);
                         if (k.ShieldUp)
                         {
                             var c = new Vector2(k.X, k.Y - 22);

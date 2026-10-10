@@ -27,6 +27,8 @@ namespace HolyPeak
                     case "--give": (auto ??= new AutomationOptions()).Give = Next(); break;
                     case "--pos": (auto ??= new AutomationOptions()).Pos = Next(); break;
                     case "--invincible": (auto ??= new AutomationOptions()).Invincible = true; break;
+                    case "--peaceful": (auto ??= new AutomationOptions()).Peaceful = true; break;
+                    case "--dump-sprites": (auto ??= new AutomationOptions()).DumpSprites = Next(); break;
                     case "--keys": (auto ??= new AutomationOptions()).Keys = Next(); break;
                     case "--help":
                         Console.WriteLine("Holy Peak\n  (no arguments)   play the game\n  --render-audio <dir>   write every sound and song as WAV");

@@ -22,6 +22,8 @@ namespace HolyPeak
         public string Give;              // flags to grant, e.g. "grips,bell,kite,boss:thornback"
         public string Keys;              // scripted presses: "frame:Button,frame:Button"
         public bool Invincible;          // assist invincibility (for watching guardians)
+        public string DumpSprites;       // write the sprite atlas to this PNG
+        public bool Peaceful;            // no creatures or guardians (to replay verifier routes)
     }
 
     public sealed class HolyPeakGame : Game
@@ -103,6 +105,8 @@ namespace HolyPeak
             _sb = new SpriteBatch(GraphicsDevice);
             G.Init(GraphicsDevice);
             Sprites.Init();
+            if (Auto?.DumpSprites != null)
+                using (var fs = File.Create(Auto.DumpSprites)) Sprites.Sheet.SaveAsPng(fs, Sprites.Sheet.Width, Sprites.Sheet.Height);
             _worldRt = new RenderTarget2D(GraphicsDevice, G.ViewW + 2, G.ViewH + 2);
             _lightRt = new RenderTarget2D(GraphicsDevice, G.ViewW + 2, G.ViewH + 2);
             _uiRt = new RenderTarget2D(GraphicsDevice, G.ViewW, G.ViewH);
