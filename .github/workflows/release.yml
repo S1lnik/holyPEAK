@@ -13,7 +13,8 @@ on:
     tags: ["v*"]
 
 env:
-  VERSION: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+  # Not called VERSION: MSBuild reads environment variables as properties and would override $(Version).
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
@@ -26,8 +27,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Use the .NET 8 SDK the game is developed with
-        run: echo '{"sdk":{"version":"8.0.100","rollForward":"latestFeature"}}' > global.json && dotnet --version
       - run: dotnet build HolyPeak.sln -c Release
       - run: dotnet run --project tools/HolyPeak.Verify -c Release --no-build
 
@@ -40,9 +39,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Use the .NET 8 SDK the game is developed with
-        run: echo '{"sdk":{"version":"8.0.100","rollForward":"latestFeature"}}' > global.json && dotnet --version
-      - run: build/package.sh "${VERSION#v}" win-x64 linux-x64
+      - run: build/package.sh "${RELEASE_TAG#v}" win-x64 linux-x64
       - uses: actions/upload-artifact@v4
         with:
           name: packages-win-linux
@@ -60,9 +57,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Use the .NET 8 SDK the game is developed with
-        run: echo '{"sdk":{"version":"8.0.100","rollForward":"latestFeature"}}' > global.json && dotnet --version
-      - run: build/package.sh "${VERSION#v}" osx-arm64 osx-x64
+      - run: build/package.sh "${RELEASE_TAG#v}" osx-arm64 osx-x64
       - uses: actions/upload-artifact@v4
         with:
           name: packages-macos
@@ -86,11 +81,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la dist
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release upload "$VERSION" dist/* --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
           else
-            gh release create "$VERSION" dist/* \
-              --title "Holy Peak ${VERSION#v}" \
+            gh release create "$RELEASE_TAG" dist/* \
+              --title "Holy Peak ${RELEASE_TAG#v}" \
               --notes-file .github/RELEASE_NOTES.md \
               --target "$GITHUB_SHA"
           fi
