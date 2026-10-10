@@ -14,6 +14,9 @@ namespace HolyPeak.Gfx
         public static readonly Color ResonanceColor = G.Hex(0x9a8cff);
         public static readonly Color EmberColor = G.Hex(0xff9a3a);
         public static readonly Color NoteColor = G.Hex(0xffe08a);
+        public static readonly Color SpellColor = G.Hex(0x9fe8ff);
+        public static readonly Color LanternColor = G.Hex(0xffc860);
+        public static readonly Color CharmColor = G.Hex(0xc8b0ff);
 
         private readonly Room _room;
         private readonly Style _st;
@@ -37,7 +40,12 @@ namespace HolyPeak.Gfx
             FindColumns(Tile.Gate, _gateCols);
             FindColumns(Tile.ArenaDoor, _doorCols);
             DoorAnim = room.ArenaClosed ? 1 : 0;
+            _ropeAngle = new float[room.Ropes.Length];
+            _ropeVel = new float[room.Ropes.Length];
         }
+
+        // ropes keep swinging for a while after the pilgrim lets go
+        private readonly float[] _ropeAngle, _ropeVel;
 
         private void FindColumns(Tile kind, List<(int, int, int)> into)
         {
@@ -72,6 +80,19 @@ namespace HolyPeak.Gfx
         public void Update(float dt)
         {
             DoorAnim = Calc.Approach(DoorAnim, _room.ArenaClosed ? 1 : 0, dt * 3f);
+            for (int i = 0; i < _ropeAngle.Length; i++)
+            {
+                if (_room.P.Rope == i)
+                {
+                    _ropeAngle[i] = _room.P.RopeAngle;
+                    _ropeVel[i] = _room.P.RopeVel;
+                    continue;
+                }
+                float len = _room.Ropes[i].Length * 0.6f;
+                _ropeVel[i] += -PlayerSim.RopeGravity / len * MathF.Sin(_ropeAngle[i]) * dt;
+                _ropeVel[i] *= 1 - 1.2f * dt;
+                _ropeAngle[i] += _ropeVel[i] * dt;
+            }
         }
 
         public void DrawBack(SpriteBatch sb) => sb.Draw(_back, Vector2.Zero, Color.White);
@@ -96,7 +117,10 @@ namespace HolyPeak.Gfx
                 var g = room.Groups[i];
                 if (g.Kind == Tile.BellGlass && !g.Gone) DrawGlass(sb, g, time);
                 else if (g.Kind == Tile.Resonance) DrawResonance(sb, g, time);
+                else if (g.Kind == Tile.Crumble) DrawCrumble(sb, g, time);
+                else if (g.Kind == Tile.Slab && !g.Gone) DrawSlab(sb, g, time);
             }
+            for (int i = 0; i < room.Ropes.Length; i++) DrawRope(sb, i, time);
 
             // portcullis gates: bars slide up into the ceiling as they open
             Color iron = G.Hex(0x3a3848), ironL = G.Hex(0x7a788c), ironD = G.Hex(0x1a1822);
@@ -150,6 +174,120 @@ namespace HolyPeak.Gfx
                         G.Rect(sb, MathF.Round(x), MathF.Round(y), 1, 3, Color.White * (0.18f + h * 0.15f));
                     }
                 }
+        }
+
+        /// <summary>Crumbling ledges: cracked slabs that shake, fall away, and fade back in.</summary>
+        private void DrawCrumble(SpriteBatch sb, in TileGroup g, float time)
+        {
+            float alpha = 1f;
+            if (g.Gone)
+            {
+                if (g.Regrow > 0.5f)
+                {
+                    // where it will return: a faint dotted outline
+                    for (int ty = g.Y0; ty <= g.Y1; ty++)
+                        for (int tx = g.X0; tx <= g.X1; tx++)
+                            if (_room.GroupOf[ty * _room.Cols + tx] == g.Index)
+                                for (int k = 0; k < 8; k += 3) G.Rect(sb, tx * 8 + k, ty * 8, 1, 1, _st.Light * 0.35f);
+                    return;
+                }
+                alpha = 1 - g.Regrow / 0.5f;
+            }
+            int shake = g.Timer > 0 ? (((int)(time * 40) & 1) == 0 ? -1 : 1) : 0;
+            Color o = _st.Outline, b = _st.Base, l = _st.Light, d = _st.Dark;
+            for (int ty = g.Y0; ty <= g.Y1; ty++)
+                for (int tx = g.X0; tx <= g.X1; tx++)
+                {
+                    if (_room.GroupOf[ty * _room.Cols + tx] != g.Index) continue;
+                    int px = tx * 8 + shake, py = ty * 8;
+                    bool lf = _room.TileAt(tx - 1, ty) != Tile.Crumble, rt = _room.TileAt(tx + 1, ty) != Tile.Crumble;
+                    G.Rect(sb, px, py, 8, 7, o * alpha);
+                    G.Rect(sb, px + (lf ? 1 : 0), py + 1, 8 - (lf ? 1 : 0) - (rt ? 1 : 0), 5, b * alpha);
+                    G.Rect(sb, px + (lf ? 1 : 0), py + 1, 8 - (lf ? 1 : 0) - (rt ? 1 : 0), 1, l * alpha);
+                    // cracks
+                    float h = Calc.Hash(tx, ty, 31);
+                    int cx = px + 2 + (int)(h * 4);
+                    G.Rect(sb, cx, py + 2, 1, 2, o * (0.8f * alpha));
+                    G.Rect(sb, cx + 1, py + 4, 1, 2, o * (0.8f * alpha));
+                    G.Rect(sb, px + 1, py + 5, 6, 1, d * alpha);
+                    // dangling roots / icicles underneath
+                    if (h > 0.5f) G.Rect(sb, px + 5, py + 7, 1, 1 + (int)(h * 2), d * alpha);
+                }
+        }
+
+        /// <summary>Heavy slabs: thick dressed stone with a star cut into it, waiting for a falling star.</summary>
+        private void DrawSlab(SpriteBatch sb, in TileGroup g, float time)
+        {
+            Color o = _st.Outline, b = G.Mix(_st.Base, _st.Light, 0.25f), l = _st.Light, d = _st.Dark;
+            var r = g.Rect;
+            G.Rect(sb, r.X, r.Y, r.Width, r.Height, o);
+            G.Rect(sb, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2, b);
+            G.Rect(sb, r.X + 1, r.Y + 1, r.Width - 2, 1, l);
+            G.Rect(sb, r.X + 1, r.Bottom - 2, r.Width - 2, 1, d);
+            for (int x = r.X + 8; x < r.Right - 1; x += 8) G.Rect(sb, x, r.Y + 2, 1, r.Height - 4, d);
+            // the star, glinting now and then
+            var c = r.Center;
+            float glint = 0.5f + 0.5f * MathF.Sin(time * 2.2f + r.X);
+            Color star = Color.Lerp(d, SpellColor, glint * 0.8f);
+            G.Rect(sb, c.X, c.Y - 3, 1, 7, star);
+            G.Rect(sb, c.X - 3, c.Y, 7, 1, star);
+            G.Rect(sb, c.X - 1, c.Y - 1, 3, 3, star);
+        }
+
+        private Color RopeColor(out Color dark)
+        {
+            switch (_st.Id)
+            {
+                case 1: dark = G.Hex(0x2e4a1e); return G.Hex(0x5f8a3a);   // vines
+                case 2: dark = G.Hex(0x5a1e1e); return G.Hex(0xa8443a);   // bell ropes
+                case 3: dark = G.Hex(0x3a3e4e); return G.Hex(0x9aa4b8);   // iron chains
+                case 4: dark = G.Hex(0x8a6a2a); return G.Hex(0xf0d080);   // golden cords
+                default: dark = G.Hex(0x6a4a2a); return G.Hex(0xc8a070);  // hemp
+            }
+        }
+
+        private void DrawRope(SpriteBatch sb, int i, float time)
+        {
+            var r = _room.Ropes[i];
+            bool held = _room.P.Rope == i;
+            Vector2 end;
+            if (held) end = _room.P.Hands;
+            else
+            {
+                float sway = MathF.Sin(time * 1.3f + i * 1.7f) * 0.03f;
+                float a = _ropeAngle[i] + sway;
+                end = r.Anchor + new Vector2(MathF.Sin(a), MathF.Cos(a)) * r.Length;
+            }
+            Color c = RopeColor(out Color dark);
+            // the bracket it hangs from
+            G.Rect(sb, r.Anchor.X - 2, r.Anchor.Y - 1, 5, 2, _st.Outline);
+            G.Rect(sb, r.Anchor.X - 1, r.Anchor.Y - 1, 3, 1, G.Hex(0x8a8aa0));
+            int n = (int)(Vector2.Distance(r.Anchor, end));
+            for (int k = 0; k <= n; k++)
+            {
+                var q = Vector2.Lerp(r.Anchor, end, k / (float)Math.Max(1, n));
+                int x = (int)MathF.Round(q.X), y = (int)MathF.Round(q.Y);
+                bool alt = ((k / 2) & 1) == 0;
+                if (_st.Id == 3)
+                {
+                    // chain links
+                    G.Rect(sb, x - 1, y, 3, 1, _st.Outline);
+                    G.Rect(sb, x + (alt ? 0 : -1), y, alt ? 1 : 3, 1, alt ? c : dark);
+                }
+                else
+                {
+                    G.Rect(sb, x - 1, y, 3, 1, _st.Outline);
+                    G.Rect(sb, x, y, 1, 1, alt ? c : dark);
+                    if (_st.Id == 1 && k % 7 == 3) G.Rect(sb, x + (k % 14 == 3 ? 1 : -2), y, 2, 1, G.Hex(0x8ec05a));
+                }
+            }
+            if (!held)
+            {
+                // the tail: a tassel, a knot, a hook
+                int ex = (int)MathF.Round(end.X), ey = (int)MathF.Round(end.Y);
+                G.Rect(sb, ex - 1, ey, 3, 3, _st.Outline);
+                G.Rect(sb, ex, ey, 1, 2, _st.Id == 2 ? G.Hex(0xf0c04c) : c);
+            }
         }
 
         private float _wallHitT = -9;
@@ -249,7 +387,7 @@ namespace HolyPeak.Gfx
                         if (!t.Used) Sprites.DrawCentered(sb, "vessel", feet + new Vector2(0, MathF.Sin(time * 2.5f) * 1.5f), Color.White);
                         break;
                     case ThingKind.Flask:
-                        if (!t.Used) Sprites.DrawCentered(sb, "balm", feet + new Vector2(0, MathF.Sin(time * 2.5f + 1) * 1.5f), Color.White);
+                        if (!t.Used) Sprites.DrawCentered(sb, "grace", feet + new Vector2(0, MathF.Sin(time * 2.5f + 1) * 1.5f), Color.White);
                         break;
                     case ThingKind.Cache:
                         if (!t.Used) Sprites.DrawFeet(sb, t.Hp <= Room.CacheHp / 2 ? "cache1" : "cache0", feet, Color.White);
@@ -282,8 +420,58 @@ namespace HolyPeak.Gfx
                             Sprites.DrawFeet(sb, "idle0", feet + new Vector2(0, MathF.Sin(time * 2) * 1.5f - 2), G.Hex(0x2a1a4a) * a, white: true);
                         }
                         break;
+                    case ThingKind.Lantern:
+                        DrawLantern(sb, t, time);
+                        break;
+                    case ThingKind.CharmPickup:
+                        if (!t.Used && !_room.CharmHidden)
+                        {
+                            string id = _room.Def.Prop("charm", "notch");
+                            Sprites.DrawCentered(sb, id == "notch" ? "notch" : "charm_" + id, feet + new Vector2(0, MathF.Sin(time * 2.5f) * 1.5f), Color.White);
+                        }
+                        break;
+                    case ThingKind.Psalm:
+                        Sprites.DrawFeet(sb, "lectern", feet, Color.White);
+                        if (!t.Used)
+                        {
+                            float a = 0.6f + 0.4f * MathF.Sin(time * 3);
+                            G.Rect(sb, t.X - 4, t.Y - 15, 3, 1, SpellColor * a);
+                            G.Rect(sb, t.X + 1, t.Y - 15, 3, 1, SpellColor * a);
+                            for (int k = 0; k < 3; k++)
+                            {
+                                float yy = t.Y - 18 - ((time * 10 + k * 7) % 18);
+                                G.Rect(sb, MathF.Round(t.X - 3 + k * 3 + MathF.Sin(time * 2 + k) * 1.5f), MathF.Round(yy), 1, 1, SpellColor * (0.7f * (1 - (t.Y - 18 - yy) / 18f)));
+                            }
+                        }
+                        break;
                 }
             }
+        }
+
+        private void DrawLantern(SpriteBatch sb, in Thing t, float time)
+        {
+            bool lit = t.T <= 0;
+            float swing = lit ? MathF.Sin(time * 2f + t.X) * 0.08f : MathF.Sin(t.T * 18f) * t.T * 0.6f;
+            var top = new Vector2(t.X, t.Y - 16);
+            var c = top + new Vector2(MathF.Sin(swing), MathF.Cos(swing)) * 9;
+            PlayerVisual.PixelLine(sb, top, c, _st.Outline, 1);
+            G.Rect(sb, top.X - 1, top.Y - 1, 3, 2, _st.Outline);
+            int x = (int)MathF.Round(c.X), y = (int)MathF.Round(c.Y);
+            Color brass = PlayerVisual.Brass, brassD = PlayerVisual.BrassDark;
+            G.Rect(sb, x - 4, y, 9, 10, _st.Outline);
+            G.Rect(sb, x - 2, y - 1, 5, 1, _st.Outline);
+            G.Rect(sb, x - 3, y + 1, 7, 1, brass);
+            G.Rect(sb, x - 3, y + 8, 7, 1, brassD);
+            G.Rect(sb, x - 3, y + 2, 7, 6, lit ? LanternColor : G.Hex(0x3a2a20));
+            if (lit)
+            {
+                G.Rect(sb, x - 1, y + 3, 3, 4, G.Hex(0xfff3c4));
+                G.Rect(sb, x, y + 4 + (((int)(time * 8) & 1)), 1, 2, Color.White);
+            }
+            else G.Rect(sb, x, y + 5, 1, 2, G.Hex(0x8a4a20));
+            G.Rect(sb, x - 3, y + 2, 1, 6, brassD);
+            G.Rect(sb, x + 3, y + 2, 1, 6, brassD);
+            G.Rect(sb, x, y + 9, 1, 2, _st.Outline);
         }
 
         public float BellSwing, BellTime;
@@ -358,6 +546,16 @@ namespace HolyPeak.Gfx
                             case 2: rot = MathF.PI / 2; break;
                             case 3: rot = -MathF.PI / 2; break;
                         }
+                        break;
+                    case EnemyType.Charger:
+                        frame = e.State == 2 ? "charger2" : (((int)(e.Anim * (e.State == 1 ? 14 : 5)) & 1) == 0 ? "charger0" : "charger1");
+                        if (e.State == 1) feet.X += ((int)(time * 40) & 1) == 0 ? -1 : 1;
+                        if (e.State == 3) { flip = !flip; feet.Y += 1; }
+                        break;
+                    case EnemyType.Chorister:
+                        frame = e.State == 1 ? "chorister1" : "chorister0";
+                        useCenter = true;
+                        center.Y += MathF.Round(MathF.Sin(e.Anim * 2.5f));
                         break;
                     default:
                         frame = e.State <= 1 ? "dropper0" : (((int)(e.Anim * 10) & 1) == 0 ? "dropper1" : "dropper2");
@@ -547,6 +745,20 @@ namespace HolyPeak.Gfx
                 bool armed = p.Armed;
                 switch (p.Type)
                 {
+                    case ProjType.Bolt:
+                    {
+                        int dir = Math.Sign(p.VX);
+                        for (int k = 0; k < 10; k++)
+                        {
+                            float tx = p.X - dir * k * 2.2f;
+                            float w = (p.R + 1) * (1 - k / 11f);
+                            float wob = MathF.Sin(time * 30 + k * 1.3f) * (k * 0.2f);
+                            G.Rect(sb, MathF.Round(tx), MathF.Round(p.Y - w / 2 + wob), 2, MathF.Max(1, MathF.Round(w)), (k < 3 ? Color.White : SpellColor) * (1 - k / 10f));
+                        }
+                        G.DiscAt(sb, pos, p.R, SpellColor);
+                        G.DiscAt(sb, pos + new Vector2(dir, 0), p.R * 0.55f, Color.White);
+                        break;
+                    }
                     case ProjType.Glob:
                         G.DiscAt(sb, pos, 3.5f, G.Hex(0x101410));
                         G.DiscAt(sb, pos, 2.5f, G.Hex(0x8cc05a));
@@ -668,7 +880,15 @@ namespace HolyPeak.Gfx
 
         public void DrawHints(SpriteBatch sb, Vector2 player, float time)
         {
-            foreach (var (pos, text) in _room.Hints) DrawHint(sb, text, pos, player, time);
+            // only the nearest hint speaks, so neighbouring lessons never talk over each other
+            int best = -1;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < _room.Hints.Count; i++)
+            {
+                float d = Vector2.Distance(player, _room.Hints[i].pos.ToVector2());
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            if (best >= 0) DrawHint(sb, _room.Hints[best].text, _room.Hints[best].pos, player, time);
         }
 
         private void DrawHint(SpriteBatch sb, string text, Point at, Vector2 player, float time)
@@ -677,7 +897,7 @@ namespace HolyPeak.Gfx
             string s = Input.Format(text);
             var lines = font.Wrap(s, 150);
             float dist = Vector2.Distance(player, at.ToVector2());
-            float a = Calc.Clamp01(1.3f - dist / 140f);
+            float a = Calc.Clamp01(1.4f - dist / 120f);
             if (a <= 0.01f) return;
             float y = at.Y - lines.Count * PixelFont.LineHeight / 2f + MathF.Sin(time * 1.5f) * 0.6f;
             float widest = 0;
@@ -719,6 +939,15 @@ namespace HolyPeak.Gfx
                     case ThingKind.GreatBell:
                         G.GlowAt(sb, c + new Vector2(0, -28), 40 + MathF.Sin(time * 1.5f) * 4, G.Hex(0xffd88a) * 0.25f);
                         break;
+                    case ThingKind.Lantern:
+                        if (t.T <= 0) G.GlowAt(sb, c + new Vector2(0, -2), 12 + MathF.Sin(time * 5 + t.X) * 1.5f, LanternColor * 0.5f);
+                        break;
+                    case ThingKind.CharmPickup:
+                        if (!t.Used && !_room.CharmHidden) G.GlowAt(sb, c, 12 + MathF.Sin(time * 3) * 2, CharmColor * 0.5f);
+                        break;
+                    case ThingKind.Psalm:
+                        if (!t.Used) G.GlowAt(sb, c + new Vector2(0, -16), 14 + MathF.Sin(time * 3) * 2, SpellColor * 0.45f);
+                        break;
                 }
             }
             for (int i = 0; i < _lights.Count; i++)
@@ -728,12 +957,14 @@ namespace HolyPeak.Gfx
             }
             foreach (var e in _room.Enemies)
                 if (e.Alive && e.Type == EnemyType.Wisp) G.GlowAt(sb, e.Center, 12, G.Hex(0x7fd8ff) * (e.State == 2 ? 0.7f : 0.4f));
+                else if (e.Alive && e.Type == EnemyType.Chorister) G.GlowAt(sb, e.Center, e.State == 1 ? 16 : 10, NoteColor * (e.State == 1 ? 0.55f : 0.25f));
             foreach (var p in _room.Projectiles)
             {
                 if (!p.Active) continue;
                 switch (p.Type)
                 {
                     case ProjType.Orb: G.GlowAt(sb, new Vector2(p.X, p.Y), 10, EmberColor * 0.6f); break;
+                    case ProjType.Bolt: G.GlowAt(sb, new Vector2(p.X, p.Y), p.R * 2.6f, SpellColor * 0.6f); break;
                     case ProjType.Flame: if (p.Armed) G.GlowAt(sb, new Vector2(p.X, p.Y), 9, EmberColor * 0.5f); break;
                     case ProjType.Note: G.GlowAt(sb, new Vector2(p.X, p.Y), 8, NoteColor * 0.45f); break;
                     case ProjType.Glob: G.GlowAt(sb, new Vector2(p.X, p.Y), 6, G.Hex(0xb0ff60) * 0.3f); break;
@@ -814,6 +1045,9 @@ namespace HolyPeak.Gfx
                     case ThingKind.Shade: if (!t.Used) Light(sb, c, 40, G.Hex(0xa080ff)); break;
                     case ThingKind.GreatBell: Light(sb, c + new Vector2(0, -20), 110, warm); break;
                     case ThingKind.Lever: Light(sb, c, 18, warm * 0.5f); break;
+                    case ThingKind.Lantern: if (t.T <= 0) Light(sb, c + new Vector2(0, -2), 54, G.Hex(0xffd890)); else Light(sb, c, 14, warm * 0.3f); break;
+                    case ThingKind.CharmPickup: if (!t.Used && !_room.CharmHidden) Light(sb, c + new Vector2(0, 4), 40, G.Hex(0xd0c0ff)); break;
+                    case ThingKind.Psalm: Light(sb, c + new Vector2(0, -8), t.Used ? 30 : 60, G.Hex(0xc0f0ff)); break;
                 }
             }
             for (int i = 0; i < _lights.Count; i++)
@@ -825,6 +1059,7 @@ namespace HolyPeak.Gfx
             {
                 if (!e.Alive) continue;
                 if (e.Type == EnemyType.Wisp) Light(sb, e.Center, 40, G.Hex(0x9fe0ff));
+                else if (e.Type == EnemyType.Chorister) Light(sb, e.Center, 44, G.Hex(0xe8e0ff));
                 else Light(sb, e.Center, 14, Color.White * 0.35f);
             }
             foreach (var p in _room.Projectiles)
@@ -834,6 +1069,7 @@ namespace HolyPeak.Gfx
                 switch (p.Type)
                 {
                     case ProjType.Orb: Light(sb, c, 34, G.Hex(0xffb070)); break;
+                    case ProjType.Bolt: Light(sb, c, 46, G.Hex(0xb8f0ff)); break;
                     case ProjType.Flame: if (p.Armed) Light(sb, c, 30, G.Hex(0xffb070)); break;
                     case ProjType.Note: Light(sb, c, 22, G.Hex(0xffe8a0)); break;
                     case ProjType.Ring: Light(sb, c, p.R + 30, G.Hex(0xffe8a0) * 0.5f); break;

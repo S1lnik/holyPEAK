@@ -26,8 +26,9 @@ namespace HolyPeak.Scenes
         private int _speechLine;
         private float _speechT;
         private Action _afterSpeech;
-        private int _shopIndex;
+        private int _shopIndex, _shopTop;
         private float _shopDeny;
+        private const int ShopRows = 7;
 
         private void OpenPause()
         {
@@ -38,6 +39,7 @@ namespace HolyPeak.Scenes
             _pauseMenu = new Menu { Back = CloseOverlay };
             _pauseMenu.Add("Resume", CloseOverlay);
             _pauseMenu.Add("Map", () => { _overlay = Overlay.Map; AudioManager.Play("map", 0.6f); });
+            _pauseMenu.Add("Charms", () => OpenCharms(false), () => Charms.Owned(_flags) != Charm.None);
             _pauseMenu.Add("Options", () =>
             {
                 _pauseView = 1;
@@ -74,8 +76,123 @@ namespace HolyPeak.Scenes
             {
                 _overlay = Overlay.Shop;
                 _shopIndex = 0;
+                _shopTop = 0;
                 AudioManager.Play("shop", 0.6f);
             });
+        }
+
+        // ---- charms ---------------------------------------------------------------------------
+
+        private int _charmIndex;
+        private bool _charmsEditable;
+        private float _charmDeny;
+        private const int CharmCols = 7;
+
+        private void OpenCharms(bool editable)
+        {
+            _overlay = Overlay.Charms;
+            _charmsEditable = editable;
+            _charmDeny = 0;
+            AudioManager.Play("map", 0.6f);
+            AudioManager.Duck(0.5f);
+            Input.Up.Consume(); Input.Confirm.Consume(); Input.Jump.Consume();
+        }
+
+        private void UpdateCharms(float dt)
+        {
+            _charmDeny = Math.Max(0, _charmDeny - dt);
+            int n = Charms.All.Length;
+            int move = (Input.Right.Repeated ? 1 : 0) - (Input.Left.Repeated ? 1 : 0) + (Input.Down.Repeated ? CharmCols : 0) - (Input.Up.Repeated ? CharmCols : 0);
+            if (move != 0)
+            {
+                int next = Math.Clamp(_charmIndex + move, 0, n - 1);
+                if (next != _charmIndex) { _charmIndex = next; AudioManager.Play("move", 0.6f); }
+            }
+            if (Input.Back.Pressed || Input.Pause.Pressed || Input.Map.Pressed)
+            {
+                Input.Back.Consume(); Input.Pause.Consume();
+                AudioManager.Play("back", 0.7f);
+                CloseOverlay();
+                if (_charmsEditable) Persist();
+                return;
+            }
+            if (!(Input.Confirm.Pressed || Input.Jump.Pressed)) return;
+            Input.Confirm.Consume(); Input.Jump.Consume();
+            var info = Charms.All[_charmIndex];
+            ref var p = ref _room.P;
+            bool owned = (Charms.Owned(_flags) & info.Charm) != 0;
+            if (!_charmsEditable || !owned) { AudioManager.Play("deny", 0.6f); _charmDeny = 0.6f; return; }
+            if (p.Wears(info.Charm))
+            {
+                p.Ch &= ~info.Charm;
+                if (info.Charm == Charm.Vigil) { p.MaxHp--; p.Hp = Math.Min(p.Hp, p.MaxHp); }
+                AudioManager.Play("unequip", 0.7f);
+            }
+            else if (Charms.Used(p.Ch) + info.Cost <= Charms.Notches(_flags))
+            {
+                p.Ch |= info.Charm;
+                if (info.Charm == Charm.Vigil) { p.MaxHp++; p.Hp++; }
+                p.AirTolls = p.MaxAirTolls;
+                AudioManager.Play("equip", 0.8f);
+            }
+            else { AudioManager.Play("deny", 0.7f); _charmDeny = 0.6f; }
+        }
+
+        private void DrawCharms(SpriteBatch sb)
+        {
+            var font = G.Font;
+            float a = _overlayA;
+            G.Rect(sb, 0, 0, G.ViewW, G.ViewH, new Color(6, 6, 16) * (0.72f * a));
+            Color accent = G.Hex(0xc8b0ff), gold = G.Hex(0xffd9a0);
+            float px = 16, py = 10, pw = G.ViewW - 32, ph = G.ViewH - 20;
+            Fx.Panel(sb, px, py, pw, ph, a, accent);
+            font.DrawCentered(sb, "Charms", new Vector2(G.ViewW / 2f, py + 6), accent * a, Color.Black * a);
+
+            var p = _room.P;
+            int notches = Charms.Notches(_flags), used = Charms.Used(p.Ch);
+            var owned = Charms.Owned(_flags);
+            string label = $"Notches {used}/{notches}";
+            font.Draw(sb, label, new Vector2(px + 14, py + 19), new Color(170, 160, 200) * a);
+            float nx = G.ViewW / 2f - notches * 4 + 1;
+            for (int i = 0; i < notches; i++)
+            {
+                bool full = i < used;
+                Color c = (_charmDeny > 0 && ((int)(_charmDeny * 10) & 1) == 0) ? G.Hex(0xff6a5a) : accent;
+                G.Rect(sb, nx + i * 8, py + 20, 5, 5, Color.Black * (0.8f * a));
+                if (full) G.Rect(sb, nx + i * 8 + 1, py + 21, 3, 3, c * a);
+                else G.RectOutline(sb, nx + i * 8 + 1, py + 21, 3, 3, c * (0.6f * a));
+            }
+
+            float gx = MathF.Round(G.ViewW / 2f - CharmCols * 30 / 2f), gy = py + 32;
+            for (int i = 0; i < Charms.All.Length; i++)
+            {
+                var info = Charms.All[i];
+                float x = gx + (i % CharmCols) * 30, y = gy + (i / CharmCols) * 28;
+                bool have = (owned & info.Charm) != 0, worn = p.Wears(info.Charm), sel = i == _charmIndex;
+                G.Rect(sb, x, y, 26, 24, Color.Black * (0.55f * a));
+                if (worn) G.RectOutline(sb, x, y, 26, 24, gold * a);
+                if (sel) G.RectOutline(sb, x - 1, y - 1, 28, 26, accent * ((0.7f + 0.3f * MathF.Sin(_time * 6)) * a));
+                if (have) Sprites.DrawCentered(sb, "charm_" + info.Id, new Vector2(x + 13, y + 12 + (sel ? MathF.Round(MathF.Sin(_time * 4)) : 0)), Color.White * a);
+                else font.DrawCentered(sb, "?", new Vector2(x + 13, y + 8), new Color(90, 85, 110) * a);
+            }
+
+            float iy = gy + 60;
+            var cur = Charms.All[_charmIndex];
+            if ((owned & cur.Charm) != 0)
+            {
+                font.Draw(sb, cur.Name, new Vector2(px + 14, iy), gold * a);
+                for (int i = 0; i < cur.Cost; i++) G.Rect(sb, px + pw - 20 - i * 7, iy + 1, 4, 4, accent * a);
+                var lines = font.Wrap(cur.Desc, (int)pw - 28);
+                for (int i = 0; i < lines.Count; i++) font.Draw(sb, lines[i], new Vector2(px + 14, iy + 12 + i * 10), new Color(210, 205, 225) * a);
+            }
+            else
+            {
+                var lines = font.Wrap("An unknown charm. It is still somewhere on the mountain.", (int)pw - 28);
+                for (int i = 0; i < lines.Count; i++) font.Draw(sb, lines[i], new Vector2(px + 14, iy + i * 10), new Color(150, 145, 170) * a);
+            }
+
+            string help = _charmsEditable ? Input.Format("{CONFIRM} wear / remove   {BACK} done") : "Rest at a shrine to change your charms.";
+            font.DrawCentered(sb, help, new Vector2(G.ViewW / 2f, py + ph - 12), accent * (0.75f * a));
         }
 
         private void ApplyAssist()
@@ -106,15 +223,12 @@ namespace HolyPeak.Scenes
                             break;
                         case 1: _optionsMenu.Update(dt); break;
                         case 2:
-                            if (Input.Confirm.Pressed || Input.Back.Pressed)
-                            {
-                                Input.Confirm.Consume(); Input.Back.Consume();
-                                AudioManager.Play("back", 0.7f);
-                                _pauseView = 1;
-                            }
+                            if (OptionsMenu.UpdateControls(dt)) _pauseView = 1;
                             break;
                     }
                     break;
+
+                case Overlay.Charms: UpdateCharms(dt); break;
 
                 case Overlay.Map:
                     if (Input.Map.Pressed || Input.Back.Pressed || Input.Pause.Pressed)
@@ -157,6 +271,8 @@ namespace HolyPeak.Scenes
                     int n = wares.Length + 1;
                     if (Input.Down.Repeated) { _shopIndex = (_shopIndex + 1) % n; AudioManager.Play("move", 0.6f); }
                     if (Input.Up.Repeated) { _shopIndex = (_shopIndex + n - 1) % n; AudioManager.Play("move", 0.6f); }
+                    if (_shopIndex < _shopTop) _shopTop = _shopIndex;
+                    if (_shopIndex >= _shopTop + ShopRows) _shopTop = _shopIndex - ShopRows + 1;
                     if (Input.Back.Pressed && !Input.Strike.Pressed) { Input.Back.Consume(); AudioManager.Play("back", 0.7f); CloseOverlay(); break; }
                     if (Input.Confirm.Pressed || Input.Jump.Pressed)
                     {
@@ -184,10 +300,15 @@ namespace HolyPeak.Scenes
             ref var p = ref _room.P;
             switch (w.Id)
             {
-                case "whet1": case "whet2": p.Damage++; break;
-                case "flask": p.MaxFlasks++; p.Flasks++; break;
+                case "whet1": case "whet2": p.Damage += 2; break;
+                case "flask": p.MaxGrace += PlayerSim.SpellCost; p.Grace += PlayerSim.SpellCost; break;
                 case "heart": p.MaxHp++; p.Hp++; break;
-                case "charm": _room.EmberCharm = true; break;
+                case "charm": _flags.Add("charm:ember"); break;
+                case "notch1": _flags.Add("notch:shop1"); break;
+                case "notch2": _flags.Add("notch:shop2"); break;
+                default:
+                    if (w.Id.StartsWith("c-")) _flags.Add("charm:" + w.Id.Substring(2));
+                    break;
             }
             AudioManager.Play("buy", 0.8f);
             Persist();
@@ -253,7 +374,7 @@ namespace HolyPeak.Scenes
             var screen = Matrix.CreateTranslation(1, 1, 0);
 
             sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: screen);
-            Backdrops[_region.Style].Draw(sb, cam, new Point(_room.Width, _room.Height), _time);
+            Backdrops[_st.Id].Draw(sb, cam, new Point(_room.Width, _room.Height), _time);
             sb.End();
 
             sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: world);
@@ -270,7 +391,7 @@ namespace HolyPeak.Scenes
             _wr.DrawDrops(sb, _time);
             _wr.DrawProjectiles(sb, _time);
             _parts.Draw(sb, false);
-            _wr.DrawHints(sb, _room.P.Center, _time);
+            if (Game.Auto?.NoHints != true) _wr.DrawHints(sb, _room.P.Center, _time);
             DrawPrompt(sb);
             sb.End();
 
@@ -286,6 +407,7 @@ namespace HolyPeak.Scenes
             _wr.DrawGlows(sb, _time);
             if (showPlayer) _pv.DrawGlow(sb, _room.P);
             _parts.Draw(sb, true);
+            DrawSpellEffects(sb);
             foreach (var r in _rings)
             {
                 float k = Calc.EaseOutCubic(r.t / 0.3f);
@@ -309,6 +431,35 @@ namespace HolyPeak.Scenes
             sb.End();
         }
 
+        private void DrawSpellEffects(SpriteBatch sb)
+        {
+            foreach (var (area, t) in _pillars)
+            {
+                float k = 1 - Calc.Clamp01(t / 0.4f);
+                float grow = Calc.EaseOutCubic(Calc.Clamp01(t / 0.08f));
+                int top = (int)(area.Bottom - area.Height * grow);
+                for (int x = area.X; x < area.Right; x++)
+                {
+                    float edge = 1 - MathF.Abs((x - area.Center.X) / (area.Width / 2f));
+                    G.Rect(sb, x, top, 1, area.Bottom - top, WorldRenderer.SpellColor * (k * (0.15f + 0.6f * edge * edge)));
+                }
+                G.Rect(sb, area.Center.X - 3, top, 6, area.Bottom - top, Color.White * (k * 0.6f));
+            }
+            foreach (var (pos, t, half) in _waves)
+            {
+                float k = Calc.EaseOutCubic(Calc.Clamp01(t / 0.25f));
+                float fade = 1 - Calc.Clamp01(t / 0.35f);
+                float r = 6 + (half - 6) * k;
+                for (int side = -1; side <= 1; side += 2)
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float x = pos.X + side * (r - i * 2);
+                        float hgt = (8 - i) * (1 - k * 0.5f);
+                        G.Rect(sb, MathF.Round(x), MathF.Round(pos.Y - hgt), 1, MathF.Round(hgt), (i == 0 ? Color.White : WorldRenderer.SpellColor) * (fade * (1 - i / 7f)));
+                    }
+            }
+        }
+
         /// <summary>"↑ Rest", "↑ Talk"... above whatever the pilgrim can use.</summary>
         private void DrawPrompt(SpriteBatch sb)
         {
@@ -317,7 +468,7 @@ namespace HolyPeak.Scenes
             string verb = t.Kind switch
             {
                 ThingKind.Shrine => "Rest", ThingKind.Merchant => "Trade", ThingKind.Npc => "Talk", ThingKind.Tablet => "Read",
-                ThingKind.Altar => "Take", ThingKind.GreatBell => "Ring the bell", _ => null,
+                ThingKind.Altar => "Take", ThingKind.GreatBell => "Ring the bell", ThingKind.Psalm => "Read the psalm", _ => null,
             };
             if (verb == null) return;
             string s = Input.Format("{UP} " + verb);
@@ -367,6 +518,7 @@ namespace HolyPeak.Scenes
                 case Overlay.Map: DrawMap(sb); break;
                 case Overlay.Dialogue: DrawDialogue(sb); break;
                 case Overlay.Shop: DrawShop(sb); break;
+                case Overlay.Charms: DrawCharms(sb); break;
             }
             sb.End();
         }
@@ -388,22 +540,11 @@ namespace HolyPeak.Scenes
                 float bob = lit && p.Hp == 1 ? MathF.Sin(_time * 10) * 0.6f : 0;
                 sb.Draw(Sprites.Sheet, new Vector2(5 + i * 8, 4 + bob), f, Color.White * hudA);
             }
-            // balm flasks, the next one filling while healing
-            for (int i = 0; i < p.MaxFlasks; i++)
-            {
-                var f = Sprites.Frames[i < p.Flasks ? "flaskFull" : "flaskEmpty"];
-                sb.Draw(Sprites.Sheet, new Vector2(6 + i * 7, 16), f, Color.White * hudA);
-            }
-            if (p.Healing)
-            {
-                float k = p.HealT / PlayerSim.HealTime;
-                G.Rect(sb, 6, 25, 30, 2, Color.Black * 0.6f);
-                G.Rect(sb, 6, 25, 30 * k, 2, PlayerVisual.Lantern);
-            }
+            DrawGrace(sb, p, hudA);
             // embers
             var ef = Sprites.Frames["ember" + ((int)(_time * 8) % 3)];
-            sb.Draw(Sprites.Sheet, new Vector2(6, 29), ef, Color.White * hudA);
-            font.DrawShadowed(sb, Save.Embers.ToString(), new Vector2(14, 30), G.Hex(0xffd9a0) * hudA, Color.Black * hudA);
+            sb.Draw(Sprites.Sheet, new Vector2(6, 25), ef, Color.White * hudA);
+            font.DrawShadowed(sb, Save.Embers.ToString(), new Vector2(14, 26), G.Hex(0xffd9a0) * hudA, Color.Black * hudA);
 
             if (Cfg.ShowTimer)
             {
@@ -430,6 +571,36 @@ namespace HolyPeak.Scenes
                 G.Rect(sb, bx, by, bw * frac, 4, G.Hex(0xd8443c) * a);
                 G.Rect(sb, bx, by, bw * frac, 1, G.Hex(0xff8a7a) * a);
                 if (b is Bellkeeper k && k.ShieldUp && k.Phase < 3) G.RectOutline(sb, bx - 2, by - 2, bw + 4, 8, WorldRenderer.GlassColor * (0.7f * a));
+            }
+        }
+
+        private float _graceShown = -1;
+
+        /// <summary>The grace vessel: a tube of light that strikes fill, and spells and healing spend.</summary>
+        private void DrawGrace(SpriteBatch sb, in PlayerSim p, float hudA)
+        {
+            const float x = 5, y = 15, h = 6;
+            float w = p.MaxGrace / 3f;
+            float target = p.Grace;
+            if (p.Healing) target -= PlayerSim.HealCost * Calc.Clamp01(p.HealT / p.HealDuration);
+            _graceShown = _graceShown < 0 ? target : Calc.Approach(_graceShown, target, 1 / 60f * 160f);
+            G.Rect(sb, x, y, w + 2, h, PlayerVisual.Outline * hudA);
+            G.Rect(sb, x + 1, y + 1, w, h - 2, G.Hex(0x2a2440) * hudA);
+            float fill = _graceShown / 3f;
+            bool deny = _graceDeny > 0 && ((int)(_graceDeny * 12) & 1) == 0;
+            Color c = deny ? G.Hex(0xff6a5a) : G.Hex(0xffe2a8);
+            if (fill > 0)
+            {
+                G.Rect(sb, x + 1, y + 1, fill, h - 2, G.Mix(c, G.Hex(0xffb23e), 0.35f) * hudA);
+                G.Rect(sb, x + 1, y + 1, fill, 1, c * hudA);
+            }
+            // a mark for every spell's or heal's worth
+            for (int i = 1; i * PlayerSim.SpellCost < p.MaxGrace; i++)
+                G.Rect(sb, x + 1 + i * PlayerSim.SpellCost / 3f, y + 1, 1, h - 2, PlayerVisual.Outline * (0.7f * hudA));
+            if (p.Grace >= PlayerSim.SpellCost)
+            {
+                float pulse = 0.25f + 0.15f * MathF.Sin(_time * 4);
+                G.Rect(sb, x + 1, y + h - 2, Math.Min(fill, w), 1, Color.White * (pulse * hudA));
             }
         }
 
@@ -491,14 +662,17 @@ namespace HolyPeak.Scenes
             var font = G.Font;
             float a = Calc.Clamp01((_phaseT - 1.0f) / 0.5f);
             if (a <= 0) return;
-            var (name, lines) = Lore.AbilityInfo(_gotAbility);
-            float h = 26 + lines.Length * 11;
-            float y = 108 + (1 - Calc.EaseOutCubic(a)) * 8;
-            Color accent = G.Hex(0xffd9a0);
+            string name = _panelName;
+            var lines = new List<string>();
+            foreach (var l in _panelLines) lines.AddRange(font.Wrap(Input.Format(l), G.ViewW - 76));
+            float h = 26 + lines.Count * 11;
+            float y = Math.Min(108, G.ViewH - h - 14) + (1 - Calc.EaseOutCubic(a)) * 8;
+            Color accent = _panelKind == PanelKind.Charm ? G.Hex(0xc8b0ff) : (_panelKind == PanelKind.Spell ? WorldRenderer.SpellColor : G.Hex(0xffd9a0));
             Fx.Panel(sb, 30, y, G.ViewW - 60, h, a, accent);
             font.DrawCentered(sb, name, new Vector2(G.ViewW / 2f, y + 6), accent * a, Color.Black * a);
-            for (int i = 0; i < lines.Length; i++)
-                font.DrawCentered(sb, Input.Format(lines[i]), new Vector2(G.ViewW / 2f, y + 20 + i * 11), Color.White * a);
+            if (_panelIcon != null) Sprites.DrawCentered(sb, _panelIcon, new Vector2(G.ViewW / 2f, y - 12), Color.White * a);
+            for (int i = 0; i < lines.Count; i++)
+                font.DrawCentered(sb, lines[i], new Vector2(G.ViewW / 2f, y + 20 + i * 11), Color.White * a);
             if (_phaseT > 1.6f)
                 font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, y + h + 3), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
         }
@@ -563,7 +737,10 @@ namespace HolyPeak.Scenes
 
             var wares = Lore.Wares;
             float y = py + 22;
-            for (int i = 0; i <= wares.Length; i++)
+            float bob = MathF.Round(MathF.Sin(_time * 5));
+            if (_shopTop > 0) font.Draw(sb, "↑", new Vector2(px + 5, py + 22 + bob), accent * (0.7f * a));
+            if (_shopTop + ShopRows <= wares.Length) font.Draw(sb, "↓", new Vector2(px + 5, py + 22 + (ShopRows - 1) * 12 - bob), accent * (0.7f * a));
+            for (int i = _shopTop; i <= wares.Length && i < _shopTop + ShopRows; i++)
             {
                 bool sel = i == _shopIndex;
                 if (sel) G.Rect(sb, px + 6, y - 2, pw - 12, 11, accent * (0.18f * a));
@@ -652,6 +829,18 @@ namespace HolyPeak.Scenes
                         float ix = pos.X + x * tex.Width / (float)r.Cols, iy = pos.Y + y * tex.Height / (float)r.Rows;
                         G.Rect(sb, MathF.Round(ix) - 1, MathF.Round(iy) - 2, 3, 3, col * a);
                     }
+                // what is still waiting here: an unread psalm, an untaken charm
+                for (int y = 0; y < r.Rows; y++)
+                    for (int x = 0; x < r.Cols; x++)
+                    {
+                        char tile = r.Map[y][x];
+                        Color? col = null;
+                        if (tile == 'P' && !_flags.Contains("spell:" + r.Prop("spell"))) col = WorldRenderer.SpellColor;
+                        else if (tile == 'C' && !_flags.Contains(Room.CharmFlag(r)) && (r.Prop("boss") == null || _flags.Contains("boss:" + r.Prop("boss")))) col = WorldRenderer.CharmColor;
+                        if (col == null) continue;
+                        float ix = pos.X + x * tex.Width / (float)r.Cols, iy = pos.Y + y * tex.Height / (float)r.Rows;
+                        G.Rect(sb, MathF.Round(ix) - 1, MathF.Round(iy) - 1, 3, 3, col.Value * (a * (0.7f + 0.3f * MathF.Sin(_time * 4))));
+                    }
                 string boss = r.Prop("boss");
                 if (boss != null && !_flags.Contains("boss:" + boss))
                     G.Rect(sb, pos.X + tex.Width / 2 - 1, pos.Y + tex.Height / 2 - 1, 3, 3, G.Hex(0xd8443c) * a);
@@ -665,10 +854,20 @@ namespace HolyPeak.Scenes
             if (((int)(_time * 3) & 1) == 0) G.Rect(sb, MathF.Round(me.X) - 1, MathF.Round(me.Y) - 1, 3, 3, Color.White * a);
             font.DrawCentered(sb, _region.Name, new Vector2(G.ViewW / 2f, 6), _st.Accent1 * a, Color.Black * a);
             float ly = G.ViewH - 11;
-            G.Rect(sb, 40, ly + 2, 3, 3, G.Hex(0xffd070) * a); font.Draw(sb, "shrine", new Vector2(46, ly), new Color(190, 190, 210) * a);
-            G.Rect(sb, 90, ly + 2, 3, 3, G.Hex(0x9ad0ff) * a); font.Draw(sb, "peddler", new Vector2(96, ly), new Color(190, 190, 210) * a);
-            G.Rect(sb, 146, ly + 2, 3, 3, G.Hex(0xd8443c) * a); font.Draw(sb, "guardian", new Vector2(152, ly), new Color(190, 190, 210) * a);
-            G.Rect(sb, 206, ly + 2, 3, 3, G.Hex(0xa080ff) * a); font.Draw(sb, "your flame", new Vector2(212, ly), new Color(190, 190, 210) * a);
+            var legend = new (Color c, string label)[]
+            {
+                (G.Hex(0xffd070), "shrine"), (G.Hex(0x9ad0ff), "peddler"), (G.Hex(0xd8443c), "guardian"),
+                (WorldRenderer.SpellColor, "psalm"), (WorldRenderer.CharmColor, "charm"), (G.Hex(0xa080ff), "your flame"),
+            };
+            float lw = 0;
+            foreach (var (_, label) in legend) lw += 6 + font.Measure(label) + 9;
+            float lx = MathF.Round((G.ViewW - lw + 9) / 2f);
+            foreach (var (c, label) in legend)
+            {
+                G.Rect(sb, lx, ly + 2, 3, 3, c * a);
+                font.Draw(sb, label, new Vector2(lx + 6, ly), new Color(190, 190, 210) * a);
+                lx += 6 + font.Measure(label) + 9;
+            }
         }
     }
 }

@@ -16,19 +16,27 @@ namespace HolyPeak.Core
         public int GameSpeed { get; set; } = 10;   // tenths: 10 = 100%
         public bool Invincible { get; set; }
 
+        // Control bindings per gameplay action, as key / pad button enum names (see Input.ApplyBindings).
+        // Keys holds the two keyboard slots ("" for an empty slot); missing entries use the defaults.
+        public Dictionary<string, string[]> Keys { get; set; } = new Dictionary<string, string[]>();
+        public Dictionary<string, string> Pads { get; set; } = new Dictionary<string, string>();
+
         public bool AssistActive => GameSpeed != 10 || Invincible;
     }
 
     public sealed class SaveData
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         public int Version { get; set; } = CurrentVersion;
         public bool Started { get; set; }
         public string Room { get; set; }
         public string ShrineRoom { get; set; }
         public int MaxHp { get; set; } = 5;
+        public int MaxGrace { get; set; } = 99;
+        public int Damage { get; set; } = 4;
+        public List<string> Equipped { get; set; } = new List<string>();
+        /// <summary>Only read when bringing a version 2 save forward.</summary>
         public int MaxFlasks { get; set; } = 2;
-        public int Damage { get; set; } = 2;
         public int Embers { get; set; }
         public List<string> Flags { get; set; } = new List<string>();
         public List<string> Visited { get; set; } = new List<string>();
@@ -73,7 +81,11 @@ namespace HolyPeak.Core
                 string path = Path.Combine(Dir, name);
                 if (!File.Exists(path)) return new T();
                 var obj = JsonSerializer.Deserialize<T>(File.ReadAllText(path), Opts);
-                if (obj is SaveData sd && sd.Version != SaveData.CurrentVersion) return new T();   // an older game's save
+                if (obj is SaveData sd)
+                {
+                    if (sd.Version == 2) Migrate(sd);
+                    if (sd.Version != SaveData.CurrentVersion) return new T();   // a version 1 save
+                }
                 return obj ?? new T();
             }
             catch (Exception e)
@@ -81,6 +93,18 @@ namespace HolyPeak.Core
                 Console.Error.WriteLine($"[save] could not read {name}: {e.Message}");
                 return new T();
             }
+        }
+
+        /// <summary>
+        /// Version 3 counts health in half-strikes (so damage doubles), heals with grace instead of balm
+        /// flasks (each flask becomes a vessel of grace) and turns the Ember Charm ware into a real charm.
+        /// </summary>
+        private static void Migrate(SaveData sd)
+        {
+            sd.Damage *= 2;
+            sd.MaxGrace = 99 + 33 * Math.Max(0, sd.MaxFlasks - 2);
+            if (sd.Flags.Contains("bought:charm") && !sd.Flags.Contains("charm:ember")) sd.Flags.Add("charm:ember");
+            sd.Version = 3;
         }
 
         public static void Write<T>(string name, T value)

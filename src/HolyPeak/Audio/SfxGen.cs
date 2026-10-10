@@ -92,6 +92,7 @@ namespace HolyPeak.Audio
                 ["drip"] = M(Drip()),
                 ["chime"] = M(Chime()),
             };
+            AddWays(d);
             return d;
         }
 

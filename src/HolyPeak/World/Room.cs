@@ -9,9 +9,10 @@ namespace HolyPeak.World
     {
         // pilgrim
         Jump, Leap, Land, Cling, GlideOpen, GlideClose, Swing, Pogo, HealStart, HealCancel, Heal, Hurt, Death, Hazard,
+        Mantle, Vault, RopeGrab, RopeJump, Lantern, Cast, NoGrace, StarLand, Bramble,
         // world
         Toll, GlassBreak, Resonate, WallHit, WallBreak, Clank, ThornHit, Ember, CacheHit, CacheBreak, Lever, GateOpen,
-        Item, Ability, Interact, Exit, ShadeReclaim, ProjectilePop,
+        Item, Ability, Interact, Exit, ShadeReclaim, ProjectilePop, CrumbleShake, CrumbleFall, CrumbleReform, CharmFound, PsalmLearned, SpellHit,
         // creatures
         EnemyHit, EnemyDie, EnemyTell, EnemyJump, EnemyLand, EnemyLunge, Shoot,
         // guardians
@@ -26,7 +27,7 @@ namespace HolyPeak.World
         public int Index;
     }
 
-    public enum ThingKind : byte { Shrine, Merchant, Npc, Tablet, Heart, Flask, Cache, Altar, Lever, GreatBell, Shade }
+    public enum ThingKind : byte { Shrine, Merchant, Npc, Tablet, Heart, Flask, Cache, Altar, Lever, GreatBell, Shade, Lantern, CharmPickup, Psalm }
 
     public struct Thing
     {
@@ -35,20 +36,29 @@ namespace HolyPeak.World
         public Rectangle Box;
         public int Hp, LastSwing, Index;
         public bool Used;
+        public float T;             // lantern: seconds until it relights
 
         public bool NeedsUp => Kind == ThingKind.Shrine || Kind == ThingKind.Merchant || Kind == ThingKind.Npc ||
-                               Kind == ThingKind.Tablet || Kind == ThingKind.GreatBell || Kind == ThingKind.Altar;
+                               Kind == ThingKind.Tablet || Kind == ThingKind.GreatBell || Kind == ThingKind.Altar || Kind == ThingKind.Psalm;
     }
 
-    /// <summary>A connected clump of breakable stone, bell-glass or resonance stone.</summary>
+    /// <summary>A rope, vine or chain hanging from a fixed point, to swing on.</summary>
+    public struct RopeDef
+    {
+        public Vector2 Anchor;
+        public float Length;
+    }
+
+    /// <summary>A connected clump of breakable stone, bell-glass, resonance stone or crumbling ledge.</summary>
     public struct TileGroup
     {
         public Tile Kind;
         public int X0, Y0, X1, Y1;  // tile bounds (inclusive)
         public int Hp, LastSwing, Index;
         public bool Gone;           // broken / shattered
-        public float Timer;         // resonance: seconds left solid
+        public float Timer;         // resonance: seconds left solid; crumble: seconds until it falls
         public bool Pending;        // resonance: woken while the pilgrim stood inside it
+        public float Regrow;        // crumble: seconds until it reforms
         public Rectangle Rect => new Rectangle(X0 * 8, Y0 * 8, (X1 - X0 + 1) * 8, (Y1 - Y0 + 1) * 8);
     }
 
@@ -83,6 +93,8 @@ namespace HolyPeak.World
         public readonly List<(Point pos, string text)> Hints = new List<(Point, string)>();
         public readonly Point? StartPoint;
         public readonly Point? BossSpawn;
+        public readonly RopeDef[] Ropes;
+        public readonly bool Trial;     // thorns send the pilgrim back to where they came in
         private readonly bool[] _openL, _openR, _openT, _openB;
 
         public PlayerSim P;
@@ -102,7 +114,7 @@ namespace HolyPeak.World
         public readonly HashSet<string> Flags;
         public bool Invincible;
         public bool NoEnemies;
-        public bool EmberCharm;
+        public bool EmberCharm => P.Wears(Charm.Ember);
 
         public readonly List<GameEvent> Events = new List<GameEvent>(32);
         public bool RecordEvents = true;
@@ -136,6 +148,7 @@ namespace HolyPeak.World
                         '#' => Tile.Solid, '=' => Tile.Solid2, ':' => Tile.Back, '-' => Tile.Platform,
                         '^' => Tile.ThornUp, 'v' => Tile.ThornDown, '<' => Tile.ThornLeft, '>' => Tile.ThornRight,
                         'x' => Tile.Breakable, 'b' => Tile.BellGlass, 'r' => Tile.Resonance, '|' => Tile.Gate, '!' => Tile.ArenaDoor,
+                        'z' => Tile.Crumble, 'q' => Tile.Slab,
                         _ => Tile.Empty,
                     };
                     if (c == 'u') Updraft[i] = true;
@@ -150,6 +163,9 @@ namespace HolyPeak.World
                         case 'F': things.Add(MakeThing(ThingKind.Flask, bx, by - 4, 10, 10, Flags.Contains("flask:" + def.Id))); break;
                         case 'A': things.Add(MakeThing(ThingKind.Altar, bx, by, 18, 22, Flags.Contains("ab:" + def.Prop("ability")))); break;
                         case 'L': things.Add(MakeThing(ThingKind.Lever, bx, by, 8, 14, Flags.Contains("lever:" + def.Id))); break;
+                        case 'O': things.Add(MakeThing(ThingKind.Lantern, bx, by - 1, 10, 12)); break;
+                        case 'C': things.Add(MakeThing(ThingKind.CharmPickup, bx, by - 4, 10, 10, Flags.Contains(CharmFlag(def)))); break;
+                        case 'P': things.Add(MakeThing(ThingKind.Psalm, bx, by, 16, 18, Flags.Contains("spell:" + def.Prop("spell")))); break;
                         case 'K': things.Add(MakeThing(ThingKind.GreatBell, bx, by, 48, 40)); break;
                         case '$':
                         {
@@ -173,7 +189,8 @@ namespace HolyPeak.World
                         EnemyType? et = c switch
                         {
                             'c' => EnemyType.Crawler, 'h' => EnemyType.Hopper, 'w' => EnemyType.Wisp,
-                            'k' => EnemyType.Sentinel, 's' => EnemyType.Spitter, 'd' => EnemyType.Dropper, _ => null,
+                            'k' => EnemyType.Sentinel, 's' => EnemyType.Spitter, 'd' => EnemyType.Dropper,
+                            'l' => EnemyType.Charger, 'g' => EnemyType.Chorister, _ => null,
                         };
                         if (et.HasValue) enemies.Add(EnemyAI.Create(et.Value, tx, ty, this));
                     }
@@ -200,10 +217,31 @@ namespace HolyPeak.World
                 _openB[tx] = Atlas.OpenAt(def.WorldX + tx * TileSize + 4, def.WorldY + Height + 4);
             }
 
+            var ropes = new List<RopeDef>();
+            string ropeProp = def.Prop("ropes");
+            if (ropeProp != null)
+                foreach (var part in ropeProp.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var v = part.Split(',');
+                    ropes.Add(new RopeDef { Anchor = new Vector2(int.Parse(v[0]) * TileSize + 4, int.Parse(v[1]) * TileSize), Length = int.Parse(v[2]) * TileSize });
+                }
+            Ropes = ropes.ToArray();
+            Trial = def.Prop("trial") != null;
+
             string bossId = def.Prop("boss");
             if (bossId != null && BossSpawn.HasValue && !Flags.Contains("boss:" + bossId) && !noEnemies)
                 Boss = Bosses.Create(bossId, this, BossSpawn.Value);
         }
+
+        /// <summary>The flag set when this room's charm (or charm notch) has been taken.</summary>
+        public static string CharmFlag(RoomDef def)
+        {
+            string id = def.Prop("charm", "notch");
+            return id == "notch" ? "notch:" + def.Id : "charm:" + id;
+        }
+
+        /// <summary>A guardian's charm only appears once the guardian has fallen.</summary>
+        public bool CharmHidden => Boss != null && !Boss.Finished;
 
         private static Thing MakeThing(ThingKind kind, int x, int y, int w, int h, bool used = false)
             => new Thing { Kind = kind, X = x, Y = y, Box = new Rectangle(x - w / 2, y - h, w, h), Used = used, LastSwing = -1 };
@@ -215,7 +253,7 @@ namespace HolyPeak.World
             for (int i = 0; i < Tiles.Length; i++)
             {
                 var kind = Tiles[i];
-                if (GroupOf[i] >= 0 || (kind != Tile.Breakable && kind != Tile.BellGlass && kind != Tile.Resonance)) continue;
+                if (GroupOf[i] >= 0 || (kind != Tile.Breakable && kind != Tile.BellGlass && kind != Tile.Resonance && kind != Tile.Crumble && kind != Tile.Slab)) continue;
                 int gi = groups.Count;
                 var g = new TileGroup { Kind = kind, X0 = int.MaxValue, Y0 = int.MaxValue, X1 = -1, Y1 = -1, Hp = WallHp, LastSwing = -1, Index = gi };
                 stack.Push(i);
@@ -236,13 +274,13 @@ namespace HolyPeak.World
                     Visit(x - 1, y); Visit(x + 1, y); Visit(x, y - 1); Visit(x, y + 1);
                 }
                 if (kind == Tile.Breakable) g.Gone = Flags.Contains(GroupFlag(g));
-                if (kind == Tile.BellGlass) g.Gone = Flags.Contains(GroupFlag(g));
+                if (kind == Tile.BellGlass || kind == Tile.Slab) g.Gone = Flags.Contains(GroupFlag(g));
                 groups.Add(g);
             }
             Groups = groups.ToArray();
         }
 
-        private string GroupFlag(in TileGroup g) => (g.Kind == Tile.Breakable ? "wall:" : "glass:") + Def.Id + ":" + g.X0 + "," + g.Y0;
+        private string GroupFlag(in TileGroup g) => (g.Kind == Tile.Breakable ? "wall:" : (g.Kind == Tile.Slab ? "slab:" : "glass:")) + Def.Id + ":" + g.X0 + "," + g.Y0;
 
         public void Emit(Ev type, Vector2 pos, Vector2 dir = default, int index = 0)
         {
@@ -278,6 +316,8 @@ namespace HolyPeak.World
                 case Tile.Breakable:
                 case Tile.BellGlass: return !Groups[GroupOf[i]].Gone;
                 case Tile.Resonance: return Groups[GroupOf[i]].Timer > 0 && !Groups[GroupOf[i]].Pending;
+                case Tile.Crumble:
+                case Tile.Slab: return !Groups[GroupOf[i]].Gone;
                 case Tile.Gate: return !GatesOpen;
                 case Tile.ArenaDoor: return ArenaClosed;
                 default: return false;
@@ -296,6 +336,17 @@ namespace HolyPeak.World
             for (int ty = Math.Max(0, ty0); ty <= Math.Min(Rows - 1, ty1); ty++)
                 for (int tx = Math.Max(0, tx0); tx <= Math.Min(Cols - 1, tx1); tx++)
                     if (TileSolid(tx, ty)) return true;
+            return false;
+        }
+
+        /// <summary>True if any unbroken bell-glass lies inside the rectangle.</summary>
+        public bool GlassAt(int x, int y, int w, int h)
+        {
+            int ty0 = Math.Max(0, FloorDiv(y, TileSize)), ty1 = Math.Min(Rows - 1, FloorDiv(y + h - 1, TileSize));
+            int tx0 = Math.Max(0, FloorDiv(x, TileSize)), tx1 = Math.Min(Cols - 1, FloorDiv(x + w - 1, TileSize));
+            for (int ty = ty0; ty <= ty1; ty++)
+                for (int tx = tx0; tx <= tx1; tx++)
+                    if (Tiles[ty * Cols + tx] == Tile.BellGlass && !Groups[GroupOf[ty * Cols + tx]].Gone) return true;
             return false;
         }
 
@@ -441,7 +492,7 @@ namespace HolyPeak.World
             for (int i = 0; i < Projectiles.Length; i++)
             {
                 ref var p = ref Projectiles[i];
-                if (p.Active && p.Type == ProjType.Note && Vector2.Distance(new Vector2(p.X, p.Y), c) < r + p.R)
+                if (p.Active && !p.Friendly && p.Type == ProjType.Note && Vector2.Distance(new Vector2(p.X, p.Y), c) < r + p.R)
                 {
                     p.Active = false;
                     Emit(Ev.ProjectilePop, new Vector2(p.X, p.Y), index: (int)p.Type);
@@ -478,6 +529,7 @@ namespace HolyPeak.World
             Time += dt;
             GateAnim = Calc.Approach(GateAnim, GatesOpen ? 1 : 0, dt * 2.5f);
             UpdateGroups(dt);
+            UpdateThings(dt);
 
             if (P.State == PState.Normal && !Exited && !HazardPending)
             {
@@ -506,14 +558,62 @@ namespace HolyPeak.World
         private void UpdateGroups(float dt)
         {
             var hb = P.Hitbox;
+            var feet = new Rectangle(P.X, P.Y + PlayerSim.H, PlayerSim.W, 1);
+            var grip = P.Clinging ? new Rectangle(P.X + P.WallDir, P.Y + 2, PlayerSim.W, PlayerSim.H - 5) : Rectangle.Empty;
             for (int i = 0; i < Groups.Length; i++)
             {
                 ref var g = ref Groups[i];
+                if (g.Kind == Tile.Crumble)
+                {
+                    UpdateCrumble(ref g, i, hb, feet, grip, dt);
+                    continue;
+                }
                 if (g.Kind != Tile.Resonance || g.Timer <= 0) continue;
                 g.Timer -= dt;
                 if (g.Pending && !GroupOverlaps(g, hb)) g.Pending = false;
                 if (g.Timer <= 0) { g.Timer = 0; g.Pending = false; }
             }
+        }
+
+        public const float CrumbleTime = 0.42f, CrumbleRegrow = 2.4f;
+
+        /// <summary>A crumbling ledge shakes once stood or clung on, falls away, and reforms a little later.</summary>
+        private void UpdateCrumble(ref TileGroup g, int index, Rectangle hb, Rectangle feet, Rectangle grip, float dt)
+        {
+            if (g.Gone)
+            {
+                g.Regrow -= dt;
+                if (g.Regrow <= 0 && !GroupOverlaps(g, hb))
+                {
+                    g.Gone = false;
+                    g.Timer = 0;
+                    Emit(Ev.CrumbleReform, g.Rect.Center.ToVector2(), index: index);
+                }
+                return;
+            }
+            if (g.Timer > 0)
+            {
+                g.Timer -= dt;
+                if (g.Timer <= 0)
+                {
+                    g.Gone = true;
+                    g.Regrow = CrumbleRegrow;
+                    Emit(Ev.CrumbleFall, g.Rect.Center.ToVector2(), index: index);
+                }
+                return;
+            }
+            bool touched = P.State == PState.Normal && ((P.OnGround && GroupOverlaps(g, feet)) || (P.Clinging && GroupOverlaps(g, grip)));
+            if (touched)
+            {
+                g.Timer = CrumbleTime;
+                Emit(Ev.CrumbleShake, g.Rect.Center.ToVector2(), index: index);
+            }
+        }
+
+        private void UpdateThings(float dt)
+        {
+            for (int i = 0; i < Things.Length; i++)
+                if (Things[i].Kind == ThingKind.Lantern && Things[i].T > 0) Things[i].T -= dt;
         }
 
         private void ResolveStrike()
@@ -531,13 +631,14 @@ namespace HolyPeak.World
                 if (!e.Alive || e.LastSwing == swing || !e.Box.Intersects(box)) continue;
                 e.LastSwing = swing;
                 connected = true; pogo = true;
-                HitEnemy(ref e, i);
+                if (HitEnemy(ref e, i)) P.GainGrace(StrikeGrace);
             }
 
             if (Boss != null && Boss.Active && !Boss.Dead && Boss.LastSwing != swing && Boss.HurtboxHit(box))
             {
                 Boss.LastSwing = swing;
                 connected = true; pogo = true;
+                if (Boss.Vulnerable) P.GainGrace(StrikeGrace);
                 Boss.TakeHit(this, P.Damage, box, dirX);
             }
 
@@ -564,7 +665,7 @@ namespace HolyPeak.World
                 int ty0 = FloorDiv(box.Top, 8), ty1 = FloorDiv(box.Bottom - 1, 8);
                 for (int ty = ty0; ty <= ty1 && !pogo; ty++)
                     for (int tx = tx0; tx <= tx1; tx++)
-                        if (IsThorn(TileAt(tx, ty)))
+                        if (TileAt(tx, ty) == Tile.ThornUp)   // only thorns pointing up, beneath the pilgrim
                         {
                             pogo = true; connected = true;
                             Emit(Ev.ThornHit, new Vector2(Math.Clamp(P.Center.X, tx * 8, tx * 8 + 8), ty * 8 + 2));
@@ -594,6 +695,14 @@ namespace HolyPeak.World
                         DropEmbers(at, 6);
                         Emit(Ev.CacheHit, at, index: i);
                     }
+                }
+                else if (t.Kind == ThingKind.Lantern)
+                {
+                    if (t.T > 0) continue;
+                    t.LastSwing = swing;
+                    t.T = PlayerSim.LanternRelight;
+                    P.LanternLaunch(this);
+                    Emit(Ev.Lantern, new Vector2(t.X, t.Y - 6), new Vector2(P.Attack == Strike.Side ? -P.Facing : 0, P.Attack == Strike.Down ? -1 : 0), i);
                 }
                 else if (t.Kind == ThingKind.Lever)
                 {
@@ -627,7 +736,10 @@ namespace HolyPeak.World
             }
         }
 
-        public void HitEnemy(ref Enemy e, int index)
+        private int StrikeGrace => PlayerSim.GracePerHit + (P.Wears(Charm.Votive) ? PlayerSim.VotiveGrace : 0);
+
+        /// <summary>The staff strikes a creature. Returns false if its shield turned the blow aside.</summary>
+        public bool HitEnemy(ref Enemy e, int index)
         {
             int dir = e.Center.X >= P.Center.X ? 1 : -1;
             if (P.Attack == Strike.Side && e.Shielded && e.Facing == -dir)
@@ -635,23 +747,30 @@ namespace HolyPeak.World
                 Emit(Ev.Clank, new Vector2(dir > 0 ? e.X : e.X + e.W, e.Y + 7), new Vector2(dir, 0), index);
                 P.Speed.X = -dir * 150f;
                 e.Speed.X = dir * 40f;
-                return;
+                return false;
             }
-            e.Hp -= P.Damage;
+            DamageEnemy(ref e, index, P.Damage, dir, P.Attack);
+            return true;
+        }
+
+        /// <summary>Wounds a creature (staff or spell), knocking it back and killing it at zero health.</summary>
+        public void DamageEnemy(ref Enemy e, int index, int damage, int dir, Strike how)
+        {
+            e.Hp -= damage;
             e.Flash = 0.14f;
-            if (e.Type == EnemyType.Wisp)
+            if (e.Type == EnemyType.Wisp || e.Type == EnemyType.Chorister)
             {
                 var away = e.Center - P.Center;
                 if (away.LengthSquared() < 1) away = new Vector2(dir, 0);
                 away.Normalize();
                 e.Speed = away * 120f;
-                if (e.State == 2) { e.State = 4; e.T = 0.5f; }
+                if (e.Type == EnemyType.Wisp && e.State == 2) { e.State = 4; e.T = 0.5f; }
             }
-            else if (e.Type != EnemyType.Spitter && !(e.Type == EnemyType.Dropper && e.State == 0))
+            else if (e.Type != EnemyType.Spitter && !(e.Type == EnemyType.Dropper && e.State == 0) && !(e.Type == EnemyType.Charger && e.State == 2))
             {
                 float k = e.Type == EnemyType.Sentinel ? 50f : 95f;
-                if (P.Attack == Strike.Side) e.Speed.X = dir * k;
-                if (P.Attack == Strike.Up && e.OnGround) e.Speed.Y = -80f;
+                if (how == Strike.Side) e.Speed.X = dir * k;
+                if (how == Strike.Up && e.OnGround) e.Speed.Y = -80f;
             }
             if (e.Type == EnemyType.Dropper && e.State <= 1) e.State = 2;
             if (e.Hp <= 0)
@@ -674,6 +793,7 @@ namespace HolyPeak.World
                 if (p.Life <= 0) { p.Active = false; continue; }
                 if (!p.Armed) continue;
                 if (p.Type == ProjType.Ring) { p.R += p.VX * dt; continue; }
+                if (p.Friendly) { UpdateBolt(ref p, dt); continue; }
                 p.VY += p.Gravity * dt;
                 p.X += p.VX * dt;
                 p.Y += p.VY * dt;
@@ -686,6 +806,122 @@ namespace HolyPeak.World
                 if (p.X < -40 || p.Y < -60 || p.X > Width + 40 || p.Y > Height + 40) p.Active = false;
             }
         }
+
+        // ---- spells ----------------------------------------------------------------------
+
+        public void CastBolt(in PlayerSim p)
+        {
+            float r = p.Wears(Charm.Psalter) ? 7f : 5f;
+            Spawn(new Projectile
+            {
+                Type = ProjType.Bolt, Friendly = true, X = p.Center.X + p.Facing * 6, Y = p.Y + 4, VX = p.Facing * PlayerSim.BoltSpeed,
+                R = r, Life = 1.1f, Damage = p.SpellDamage, HitsTerrain = true,
+            });
+        }
+
+        private void UpdateBolt(ref Projectile p, float dt)
+        {
+            p.X += p.VX * dt;
+            int dir = Math.Sign(p.VX);
+            var box = new Rectangle((int)(p.X - p.R), (int)(p.Y - p.R), (int)(p.R * 2), (int)(p.R * 2));
+            for (int i = 0; i < Enemies.Length && i < 64; i++)
+            {
+                ref var e = ref Enemies[i];
+                if (!e.Alive || (p.HitMask & (1UL << i)) != 0 || !e.Box.Intersects(box)) continue;
+                p.HitMask |= 1UL << i;
+                DamageEnemy(ref e, i, p.Damage, dir, Strike.Side);
+                Emit(Ev.SpellHit, e.Center, new Vector2(dir, 0));
+            }
+            if (!p.HitBoss && Boss != null && Boss.Active && !Boss.Dead && Boss.HurtboxHit(box))
+            {
+                p.HitBoss = true;
+                Boss.TakeHit(this, p.Damage, box, dir);
+            }
+            if (SolidAt((int)(p.X - 2), (int)(p.Y - 2), 4, 4, true) || p.X < -20 || p.X > Width + 20)
+            {
+                p.Active = false;
+                Emit(Ev.ProjectilePop, new Vector2(p.X - p.VX * dt, p.Y), index: (int)p.Type);
+            }
+        }
+
+        public static Rectangle PsalmArea(in PlayerSim p) => new Rectangle((int)p.Center.X - 18, p.Y - 58, 36, 64);
+
+        public void CastPsalm(in PlayerSim p)
+        {
+            var area = PsalmArea(p);
+            SpellArea(area, p.SpellDamage, 0, Strike.Up);
+            for (int i = 0; i < Projectiles.Length; i++)
+            {
+                ref var pr = ref Projectiles[i];
+                if (!pr.Active || pr.Friendly || !pr.Breakable || !CircleRect(pr.X, pr.Y, pr.R, area)) continue;
+                pr.Active = false;
+                Emit(Ev.ProjectilePop, new Vector2(pr.X, pr.Y), index: (int)pr.Type);
+            }
+        }
+
+        public static Rectangle StarArea(in PlayerSim p) => new Rectangle((int)p.Feet.X - 40, (int)p.Feet.Y - 24, 80, 26);
+
+        /// <summary>The falling star lands: a burst of light along the ground.</summary>
+        public void StarBurst(in PlayerSim p)
+        {
+            SpellArea(StarArea(p), p.SpellDamage, 0, Strike.Down);
+            Emit(Ev.StarLand, p.Feet);
+        }
+
+        /// <summary>Creatures the falling star passes through on the way down.</summary>
+        public void DiveHits(in PlayerSim p)
+        {
+            var box = p.Hitbox;
+            box.Inflate(3, 3);
+            SpellArea(box, p.SpellDamage, 0, Strike.Down);
+        }
+
+        /// <summary>The falling star smashes any cracked floor directly beneath it. True if something broke.</summary>
+        public bool DiveBreak(in PlayerSim p)
+        {
+            var below = new Rectangle(p.X, p.Y + PlayerSim.H, PlayerSim.W, 2);
+            bool broke = false;
+            for (int gi = 0; gi < Groups.Length; gi++)
+            {
+                ref var g = ref Groups[gi];
+                if ((g.Kind != Tile.Breakable && g.Kind != Tile.Slab) || g.Gone || !GroupOverlaps(g, below)) continue;
+                g.Gone = true;
+                Flags.Add(GroupFlag(g));
+                Emit(Ev.WallBreak, g.Rect.Center.ToVector2(), index: gi);
+                broke = true;
+            }
+            return broke;
+        }
+
+        /// <summary>Thorns burst from the pilgrim when hurt while wearing the Bramble Vow.</summary>
+        public void BrambleBurst(in PlayerSim p)
+        {
+            var area = new Rectangle((int)p.Center.X - 34, (int)p.Center.Y - 30, 68, 56);
+            SpellArea(area, p.Damage, -1, Strike.Side);
+            Emit(Ev.Bramble, p.Center);
+        }
+
+        /// <summary>Wounds every creature (and the guardian) inside an area, once per cast.</summary>
+        private void SpellArea(Rectangle area, int damage, int id, Strike how)
+        {
+            int spell = id == 0 ? P.SpellId : --_brambleId;
+            for (int i = 0; i < Enemies.Length; i++)
+            {
+                ref var e = ref Enemies[i];
+                if (!e.Alive || e.LastSpell == spell || !e.Box.Intersects(area)) continue;
+                e.LastSpell = spell;
+                int dir = e.Center.X >= area.Center.X ? 1 : -1;
+                DamageEnemy(ref e, i, damage, dir, how);
+                Emit(Ev.SpellHit, e.Center, new Vector2(dir, 0));
+            }
+            if (Boss != null && Boss.Active && !Boss.Dead && Boss.LastSpell != spell && Boss.HurtboxHit(area))
+            {
+                Boss.LastSpell = spell;
+                Boss.TakeHit(this, damage, area, 0);
+            }
+        }
+
+        private int _brambleId = -1000;
 
         /// <summary>Height of an erupting thorn at its age (rises, holds, sinks).</summary>
         public static float ThornHeight(in Projectile p)
@@ -777,7 +1013,7 @@ namespace HolyPeak.World
             for (int i = 0; i < Projectiles.Length; i++)
             {
                 ref var p = ref Projectiles[i];
-                if (!p.Active || P.Invuln > 0 || !ProjectileHits(p, hb)) continue;
+                if (!p.Active || p.Friendly || P.Invuln > 0 || !ProjectileHits(p, hb)) continue;
                 if (P.Hurt(this, p.Damage, p.X))
                 {
                     if (p.Type != ProjType.Wave && p.Type != ProjType.Thorn && p.Type != ProjType.Ring) p.Active = false;
@@ -810,7 +1046,13 @@ namespace HolyPeak.World
                         _ => new Rectangle(px, py + 1, 4, 6),
                     };
                     if (!danger.Intersects(hb)) continue;
-                    P.Hurt(this, 1, px + 4, ignoreInvuln: true);
+                    if (P.Wears(Charm.Ward))
+                    {
+                        P.Speed = Vector2.Zero;
+                        P.Diving = false;
+                        P.Rope = -1;
+                    }
+                    else P.Hurt(this, 1, px + 4, ignoreInvuln: true);
                     if (P.State == PState.Normal)
                     {
                         HazardPending = true;
@@ -828,7 +1070,9 @@ namespace HolyPeak.World
             P.RemX = P.RemY = 0;
             P.Speed = Vector2.Zero;
             P.StunT = 0;
-            P.Clinging = P.Gliding = P.Healing = false;
+            P.Clinging = P.Gliding = P.Healing = P.Diving = false;
+            P.Rope = -1;
+            P.MomentumT = 0;
             P.Attack = Strike.None;
             P.State = PState.Normal;
             P.OnGround = true;
@@ -855,15 +1099,26 @@ namespace HolyPeak.World
                     case ThingKind.Flask:
                         t.Used = true;
                         Flags.Add("flask:" + Def.Id);
-                        P.MaxFlasks++; P.Flasks = P.MaxFlasks;
+                        P.MaxGrace += PlayerSim.SpellCost; P.Grace = P.MaxGrace;
                         Emit(Ev.Item, new Vector2(t.X, t.Y), index: 1);
                         break;
+                    case ThingKind.CharmPickup:
+                    {
+                        if (CharmHidden) break;
+                        t.Used = true;
+                        string flag = CharmFlag(Def);
+                        Flags.Add(flag);
+                        var info = Charms.Get(Def.Prop("charm", "notch"));
+                        Emit(Ev.CharmFound, new Vector2(t.X, t.Y), index: info == null ? -1 : Charms.Index(info.Charm));
+                        break;
+                    }
                     case ThingKind.Shade:
                         t.Used = true;
                         Emit(Ev.ShadeReclaim, new Vector2(t.X, t.Y - 7));
                         break;
                     case ThingKind.Cache:
                     case ThingKind.Lever:
+                    case ThingKind.Lantern:
                         break;
                     default:
                         if (P.OnGround || t.Kind == ThingKind.Altar) NearThing = i;
@@ -880,6 +1135,15 @@ namespace HolyPeak.World
                     Flags.Add("ab:" + Def.Prop("ability"));
                     P.Ab |= ab;
                     Emit(Ev.Ability, new Vector2(t.X, t.Y - 12), index: (int)ab);
+                }
+                else if (t.Kind == ThingKind.Psalm)
+                {
+                    t.Used = true;
+                    var sp = Charms.SpellFromId(Def.Prop("spell"));
+                    Flags.Add("spell:" + Def.Prop("spell"));
+                    P.Sp |= sp;
+                    if (P.Grace < PlayerSim.SpellCost) P.Grace = Math.Min(P.MaxGrace, PlayerSim.SpellCost);
+                    Emit(Ev.PsalmLearned, new Vector2(t.X, t.Y - 12), index: (int)sp);
                 }
                 else Emit(Ev.Interact, new Vector2(t.X, t.Y), index: NearThing);
             }

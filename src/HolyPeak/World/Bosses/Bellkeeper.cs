@@ -40,7 +40,7 @@ namespace HolyPeak.World
             _floor = spawn.Y;
         }
 
-        protected override bool Vulnerable => !ShieldUp;
+        public override bool Vulnerable => !ShieldUp;
         private float Tell => Phase == 3 ? 0.72f : (Phase == 2 ? 0.86f : 1f);
         private float ShieldWindow => Phase == 1 ? 3.6f : 2.7f;
 

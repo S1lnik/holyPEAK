@@ -78,6 +78,12 @@ class Room:
                 if side == 'B': self.g[self.h - 1 - d][i] = '.'
         return self
 
+    def rope(self, x, y, length):
+        """A rope, vine or chain hanging from the top of tile (x, y), `length` tiles long."""
+        ropes = self.props.get('ropes')
+        self.props['ropes'] = (ropes + ';' if ropes else '') + f'{x},{y},{length}'
+        return self
+
     def text(self):
         return [''.join(row) for row in self.g]
 

@@ -31,6 +31,9 @@ namespace HolyPeak.Gfx
         private float _strikeT;
         private int _strikeFacing = 1;
         private float _kiteOpen;
+        private float _castT = 9;
+        private Spell _castSpell;
+        private int _castFacing = 1;
         public bool HasBell;
         public Vector2 LanternPos { get; private set; }
         public float LanternGlow { get; private set; } = 1f;
@@ -106,6 +109,36 @@ namespace HolyPeak.Gfx
                     parts.Emit(e.Pos, Vector2.Zero, Lantern * 0.6f, 0.5f, 6, PShape.Glow, sizeEnd: 40, additive: true);
                     AudioManager.Play("heal", 0.7f);
                     break;
+                case Ev.Mantle:
+                    Scale = new Vector2(1.2f, 0.82f);
+                    for (int i = 0; i < 4; i++)
+                        parts.Emit(e.Pos + new Vector2(0, rng.Range(-2, 1)), new Vector2(rng.Range(-15, 15), rng.Range(-20, -5)), dust, 0.3f, 1, drag: 4);
+                    AudioManager.Play("mantle", 0.45f, pitchVariance: 0.08f);
+                    break;
+                case Ev.Vault:
+                    Scale = new Vector2(0.7f, 1.32f);
+                    for (int i = 0; i < 9; i++)
+                        parts.Emit(e.Pos + new Vector2(rng.Range(-3, 3), -1), new Vector2(-e.Dir.X * rng.Range(20, 70), rng.Range(-30, -4)), dust, 0.4f, 1, drag: 4);
+                    AudioManager.Play("vault", 0.65f, pitchVariance: 0.05f);
+                    break;
+                case Ev.RopeGrab:
+                    Scale = new Vector2(0.9f, 1.12f);
+                    AudioManager.Play("ropegrab", 0.5f, pitchVariance: 0.08f);
+                    break;
+                case Ev.RopeJump:
+                    Scale = new Vector2(0.75f, 1.28f);
+                    AudioManager.Play("ropejump", 0.55f, pitchVariance: 0.06f);
+                    break;
+                case Ev.Lantern:
+                    Scale = e.Dir.Y < 0 ? new Vector2(0.75f, 1.3f) : new Vector2(1.25f, 0.85f);
+                    break;
+                case Ev.Cast:
+                    _castT = 0;
+                    _castSpell = (Spell)e.Index;
+                    _castFacing = p.Facing;
+                    Scale = new Vector2(1.15f, 0.9f);
+                    AudioManager.Play("cast", 0.6f, pitchVariance: 0.05f);
+                    break;
             }
         }
 
@@ -114,6 +147,7 @@ namespace HolyPeak.Gfx
             _time += dt;
             Scale = Calc.Approach(Scale, Vector2.One, dt * 3.0f);
             _strikeT += dt;
+            _castT += dt;
             _healGlow = Math.Max(0, _healGlow - dt * 1.5f);
             _kiteOpen = Calc.Approach(_kiteOpen, p.Gliding ? 1 : 0, dt * (p.Gliding ? 9 : 6));
             _blinkT -= dt;
@@ -122,6 +156,11 @@ namespace HolyPeak.Gfx
             // Animation
             if (p.State == PState.Dead || p.StunT > 0) _frame = "hurt";
             else if (p.Healing) _frame = "kneel";
+            else if (p.OnRope) _frame = "hang";
+            else if (p.Diving) _frame = "dive";
+            else if (_castT < 0.2f) _frame = "cast";
+            else if (p.VaultT > 0.1f) _frame = "vault";
+            else if (p.MantleT > 0.12f && !p.OnGround) _frame = "tuck";
             else if (p.Clinging) _frame = "cling";
             else if (p.Gliding) _frame = "glide";
             else if (_strikeT < 0.2f && _lastStrike == Strike.Up) _frame = "lookup";
@@ -145,6 +184,7 @@ namespace HolyPeak.Gfx
             float target = StaffRest(p);
             float swing = SwingAngle(p, out bool swinging);
             if (swinging) _staffAngle = swing;
+            else if (_castT < 0.06f || (p.VaultT > 0.2f)) _staffAngle = target;
             else _staffAngle = LerpAngle(_staffAngle, target, Calc.Damp(16f, dt));
 
             var hand = Hand(p);
@@ -170,6 +210,10 @@ namespace HolyPeak.Gfx
                                new Vector2(-p.WallDir * parts.Rng.Range(4, 14), parts.Rng.Range(-6, 4)), dust, 0.3f, 1, drag: 4);
                 }
             }
+            if (p.Diving && parts.Rng.Chance(dt * 90))
+                parts.Emit(p.Center + new Vector2(parts.Rng.Range(-3, 3), -4), new Vector2(parts.Rng.Range(-8, 8), -40), WorldRenderer.SpellColor, 0.3f, 1, PShape.Line, drag: 3, additive: true);
+            if (p.VaultT > 0 && parts.Rng.Chance(dt * 40))
+                parts.Emit(p.Center, new Vector2(-p.Speed.X * 0.2f, 0), dust, 0.25f, 1, drag: 4);
             if (p.Healing && parts.Rng.Chance(dt * 30))
             {
                 var c = p.Center + parts.Rng.InCircle(14);
@@ -183,6 +227,7 @@ namespace HolyPeak.Gfx
             {
                 var force = new Vector2(-p.Facing * 10f + wind * 0.5f - p.Speed.X * 0.15f, 30f - p.Speed.Y * 0.12f) + new Vector2(0, MathF.Sin(_time * 7f + i * 0.9f) * 6f);
                 if (p.Gliding) force.Y -= 20f;
+                if (p.Diving) force.Y -= 90f;
                 _cloak[i] += force * dt;
                 var d = _cloak[i] - _cloak[i - 1];
                 float len = d.Length();
@@ -194,6 +239,7 @@ namespace HolyPeak.Gfx
         {
             var f = Feet(p);
             if (p.Healing) return f + new Vector2(p.Facing * 4, -5);
+            if (p.OnRope) return f + new Vector2(-p.Facing * 3, -8);
             if (p.Clinging) return f + new Vector2(-p.WallDir * 3, -8);
             return f + new Vector2(p.Facing * 4, -7);
         }
@@ -202,7 +248,11 @@ namespace HolyPeak.Gfx
         {
             int f = p.Clinging ? -p.WallDir : p.Facing;
             float a;
-            if (p.Gliding) a = -MathF.PI / 2 + f * 0.12f;
+            if (p.Diving) a = MathF.PI / 2 - f * 0.15f;
+            else if (_castT < 0.22f) a = _castSpell == Spell.Psalm ? -MathF.PI / 2 + 0.1f : (_castSpell == Spell.Star ? 1.2f : -0.15f);
+            else if (p.VaultT > 0.12f) a = 1.95f;
+            else if (p.OnRope) a = -2.4f;
+            else if (p.Gliding) a = -MathF.PI / 2 + f * 0.12f;
             else if (p.Healing) a = -MathF.PI / 2;
             else if (p.Clinging) a = -1.0f;
             else if (!p.OnGround) a = p.Speed.Y < 0 ? -1.25f : -1.9f;
@@ -279,8 +329,17 @@ namespace HolyPeak.Gfx
                 }
 
             var r = Sprites.Frames[_frame];
-            sb.Draw(Sprites.Sheet, feet, r, Color.White * alpha, 0f, new Vector2(r.Width / 2f, r.Height), Scale,
-                    f < 0 ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+            var fx = f < 0 ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
+            if (p.OnRope)
+            {
+                // hang from the hands and lean with the swing
+                sb.Draw(Sprites.Sheet, Round(p.Hands), r, Color.White * alpha, -p.RopeAngle * 0.8f, new Vector2(r.Width / 2f, 3), Scale, fx, 0f);
+            }
+            else
+            {
+                float tilt = p.VaultT > 0.1f ? f * 0.25f : 0f;
+                sb.Draw(Sprites.Sheet, feet, r, Color.White * alpha, tilt, new Vector2(r.Width / 2f, r.Height), Scale, fx, 0f);
+            }
 
             DrawStaff(sb, butt, tip, alpha);
             // hand gripping the staff

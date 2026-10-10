@@ -1,16 +1,16 @@
-**Holy Peak 2.0** turns the climb into a journey across one interconnected mountain.
-Explore five regions, fight with your pilgrim's staff, trade embers with Old Tam, find the Iron Grips, the Bell of Resonance and the Pilgrim's Kite, and face four guardians on the way to the great bell. All art, music and sound are generated in code.
+**Holy Peak 2.1** is about moving, casting and choosing: the mountain is built around new parkour, your staff learns three psalms, and thirteen charms let you shape how the pilgrim plays.
 
-### What's new in 2.0
+### What's new in 2.1
 
-- **A connected world** of 33 chambers: Pilgrim's Rest, Thornwood, the Sunken Abbey, Frostwind Cliffs and the Holy Peak, with a map, five shrines, shortcuts, and secrets that open up as you find new relics.
-- **A new pilgrim and a new way to move**: strike with your staff (and bounce off foes and thorns with a downward strike), cling and leap with the Iron Grips, ring the Bell of Resonance to shatter bell-glass and wake resonance stones, and glide on updrafts with the Pilgrim's Kite.
-- **Combat**: six kinds of creatures and four guardians: Thornback, the Hollow Abbot, the Frost Wyrm and the Bellkeeper.
-- **Health, healing and embers**: vigil flames, balm flasks, a peddler's shop, and a lingering flame that keeps your embers where you fell.
-- **Darkness and light**: caves and crypts are dark, and the lantern on your staff, candles and lit windows push the dark back.
-- New sound effects for every action, and new music for the village and the guardians.
+- **Much more parkour**, all of it yours from the first step: pull yourself up onto ledges, vault forward on your staff, swing on ropes, vines and chains, get thrown by hanging lanterns, and run across ledges that crumble under you. Momentum carries through all of it.
+- **Grace and psalms.** Staff hits gather grace. Spend it to heal, or on a psalm: **Lantern Bolt**, **Falling Star** (which breaks heavy slabs) and **Rising Psalm**. Psalms hit for half your staff's damage but at range or over an area, so every spell is a heal you chose not to take.
+- **Thirteen charms** with notches, found from the very first region: hidden, sold by Old Tam, guarded by trials or left by the guardians. Wear them at shrines.
+- **Eight new chambers** (41 in all): a wayside chapel under the village well, the rooftops above the watchtower, the scriptorium, the frost spire, and four **trials** that test everything you know, each ending in a charm or a notch.
+- **New creatures**: boarlets that charge when they see you, and choristers, whose rings you answer with the bell.
+- **Rebindable controls** for keyboard (two keys per action) and gamepad, under Options > Controls. Button prompts follow the keys you use.
+- **Polish everywhere**: a map that marks unread psalms and untaken charms, a scrolling shop, a charm screen, a fuller ending tally, new sounds for every new move, and a lot of tuning to how the pilgrim feels.
 
-Saves from version 1 are not carried over: 2.0 is a new journey.
+Saves from 2.0 carry over: your journey continues, and the new chambers and charms are waiting where you have already been.
 
 ## Download
 
@@ -31,16 +31,19 @@ Nothing needs installing: each download includes everything it needs.
 
 ## Controls
 
+Every action can be rebound under Options > Controls. The defaults:
+
 | Action | Keyboard | Gamepad |
 |---|---|---|
 | Move, look | Arrow keys or WASD | Left stick or D-pad |
 | Jump, open the kite | Z or Space | A |
 | Strike | X or J | X |
-| Ring the bell | C or K | Y or RB |
-| Heal (hold) | V or L | B or LB |
+| Ring the bell | C or K | Y |
+| Cast a psalm | F or I | RB or RT |
+| Heal (hold) | V or L | B, LB or LT |
 | Rest, talk, use | Up or W | Up |
 | Map | Tab or M | Back |
-| Pause | Esc or Enter | Start |
+| Pause | Esc or P | Start |
 | Fullscreen | F11 | |
 
-Assist options (game speed, invincibility) are in Options.
+Hold Down and strike while running to vault; hold Down and strike in the air to bounce. Assist options (game speed, invincibility) are in Options.

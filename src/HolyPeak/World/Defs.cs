@@ -19,6 +19,8 @@ namespace HolyPeak.World
         Resonance,  // 'r'  solid for a short while after a toll
         Gate,       // '|'  opened by a lever
         ArenaDoor,  // '!'  closes while a guardian is being fought
+        Crumble,    // 'z'  a ledge that falls away soon after it is stood on, and reforms
+        Slab,       // 'q'  a heavy slab only the falling star breaks
     }
 
     [Flags]

@@ -123,13 +123,16 @@ namespace HolyPeak.Scenes
                     Row(sb, "Time", Calc.FormatTime(time), 60, a);
                     Row(sb, "Deaths", deaths.ToString(), 72, a);
                     Row(sb, "Creatures felled", Save.Kills.ToString(), 84, a);
-                    Row(sb, "Mountain found", pct + "%", 96, a);
+                    int charms = 0;
+                    foreach (var c in Charms.All) if (flags.Contains("charm:" + c.Id)) charms++;
+                    Row(sb, "Charms found", $"{charms}/{Charms.All.Length}", 96, a);
+                    Row(sb, "Mountain found", pct + "%", 108, a);
                     string note = pct >= 100
                         ? "Nothing on the mountain is hidden from you now."
                         : (pct >= 75 ? "A few secrets still sleep on the mountain." : "Much of the mountain still waits for you.");
-                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 112), new Color(220, 210, 190) * a);
-                    if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 128), new Color(150, 150, 170) * a);
-                    if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 142), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
+                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 122), new Color(220, 210, 190) * a);
+                    if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 134), new Color(150, 150, 170) * a);
+                    if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 148), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
                     break;
                 }
                 case 2:

@@ -26,7 +26,7 @@ namespace HolyPeak.Verify
             ("a-chapter", () => Exit(R)), ("a-cloister", () => Exit(R)), ("a-sanctum", () => Exit(U)), ("a-tower", () => Exit(U)),
             ("f-ledge", () => Exit(L)), ("f-icefall", () => Exit(L)), ("f-crevasse", () => Exit(L)),
             ("f-cliff", () => Flag("ab:kite")), ("f-cliff", () => Exit(U)), ("f-windway", () => Exit(R)), ("f-hollow", () => Exit(R)),
-            ("f-ascent", () => Exit(U, 60, 65)), ("s-shrine", () => Exit(L)), ("s-stairs", () => Exit(U, 17, 22)), ("s-gate", () => Exit(U)),
+            ("f-ascent", () => Exit(U, 60, 65)), ("s-shrine", () => Exit(L)), ("s-stairs", () => Exit(U, 17, 22)), ("s-gate", () => Big(Exit(U))),
             ("s-bell", () => Bell()),
         };
 
@@ -34,13 +34,14 @@ namespace HolyPeak.Verify
             => new Check { Goal = GoalKind.Exit, Side = side, A0 = a0, A1 = a1 };
         private static Check Flag(string f) => new Check { Goal = GoalKind.Flag, GoalFlag = f };
         private static Check Bell() => new Check { Goal = GoalKind.Bell };
+        private static Check Big(Check c) { c.Budget = 4_000_000; return c; }
 
         public static int Run(string outPath, int k, int maxNodes)
         {
             var sw = Stopwatch.StartNew();
             var flags = new HashSet<string>();
             var room = new Room(Atlas.StartRoom, flags, noEnemies: true) { RecordEvents = false };
-            var carry = new PlayerSim { Hp = 5, MaxHp = 5, Flasks = 2, MaxFlasks = 2, Damage = 2, Facing = 1 };
+            var carry = new PlayerSim { Hp = 5, MaxHp = 5, Grace = 99, MaxGrace = 99, Damage = 4, Facing = 1 };
             Travel.Arrive(room, carry, null, Microsoft.Xna.Framework.Vector2.Zero, room.StartPoint);
             var all = new List<PlayerInput>();
             foreach (var (id, make) in Route)
@@ -51,8 +52,8 @@ namespace HolyPeak.Verify
                     return 1;
                 }
                 var goal = make();
-                goal.Name = id; goal.Room = id; goal.Ab = room.P.Ab;
-                var solver = new Solver(room, goal, k, maxNodes);
+                goal.Name = id; goal.Room = id; goal.Ab = room.P.Ab; goal.Spells = room.P.Sp; goal.Charms = room.P.Ch;
+                var solver = new Solver(room, goal, k, goal.Budget > 0 ? goal.Budget : maxNodes);
                 var path = solver.Solve(out int nodes);
                 if (path == null)
                 {

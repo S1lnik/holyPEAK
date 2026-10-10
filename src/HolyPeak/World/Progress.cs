@@ -19,10 +19,17 @@ namespace HolyPeak.World
             {
                 if (r.Has('H')) Count("heart:" + r.Id);
                 if (r.Has('F')) Count("flask:" + r.Id);
+                if (r.Has('P')) Count("spell:" + r.Prop("spell"));
+                if (r.Has('C') && r.Prop("charm", "notch") == "notch") Count("notch:" + r.Id);
                 int caches = r.Count('$');
                 for (int i = 0; i < caches; i++) Count($"cache:{r.Id}:{i}");
             }
-            foreach (var w in Lore.Wares) Count("bought:" + w.Id);
+            foreach (var c in Charms.All) Count("charm:" + c.Id);
+            // wares that are charms or notches are already counted above
+            foreach (var w in Lore.Wares)
+                if (w.Id != "charm" && !w.Id.StartsWith("c-") && !w.Id.StartsWith("notch")) Count("bought:" + w.Id);
+            Count("notch:shop1");
+            Count("notch:shop2");
             Count("rung");
             return (got, total);
         }

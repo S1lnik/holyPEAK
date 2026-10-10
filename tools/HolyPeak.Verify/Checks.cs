@@ -13,6 +13,8 @@ namespace HolyPeak.Verify
                                 GBK = Abilities.Grips | Abilities.Bell | Abilities.Kite;
         private const float Up = -265f;   // the boost given when entering a room from below
 
+        private static Check Knowing(this Check c, Spell s) { c.Spells = s; return c; }
+
         private static Check C(string name, string room, int x, int y, Abilities ab, float vx = 0, float vy = 0, params string[] flags)
             => new Check { Name = name, Room = room, StartX = x, StartY = y, Ab = ab, Vx = vx, Vy = vy, Flags = flags };
 
@@ -28,6 +30,11 @@ namespace HolyPeak.Verify
 
         private static Check Gate(this Check c) { c.ExpectFail = true; return c; }
 
+        private static Check Budget(this Check c, int nodes) { c.Budget = nodes; return c; }
+
+        /// <summary>Route through this tile rectangle first (a waypoint that keeps the search on course).</summary>
+        private static Check Via(this Check c, int x0, int y0, int x1, int y1) { c.Vias.Add(new Microsoft.Xna.Framework.Rectangle(x0, y0, x1 - x0 + 1, y1 - y0 + 1)); return c; }
+
         private const int U = 1, L = 2, R = 3, D = 4;
 
         public static List<Check> All() => new List<Check>
@@ -36,6 +43,13 @@ namespace HolyPeak.Verify
             C("village: east road", "v-east", 34, 20, None).Exit(L),
             C("village: square", "v-square", 78, 20, None).Exit(L),
             C("village: west gate", "v-west", 38, 20, None).Exit(L),
+            C("village: down the well", "v-west", 27, 20, None).Exit(D),
+            C("chapel: to the psalm", "v-chapel", 18, 19, None).Touch(74, 12),
+            C("chapel: the high gallery back to the well", "v-chapel", 74, 12, None).Via(60, 4, 70, 6).Exit(U),
+            C("chapel: reliquary (cracked wall)", "v-chapel", 18, 19, None).Touch(2, 19),
+            C("village: up the watchtower", "v-west", 27, 20, None).Exit(U),
+            C("village: rooftops charm", "v-roofs", 4, 22, None, 0, Up).Touch(34, 1),
+            C("village: off the rooftops", "v-roofs", 34, 1, None).Exit(D),
             C("thornwood: forest edge", "t-edge", 38, 20, None).Exit(L),
             C("thornwood: brambles to hollow", "t-brambles", 38, 20, None).Exit(D),
             C("thornwood: brambles to smithy", "t-brambles", 38, 20, None).Exit(L),
@@ -45,6 +59,10 @@ namespace HolyPeak.Verify
             C("thornwood: smithy down to hollow", "t-smithy", 30, 20, None).Exit(D),
             C("thornwood: hollow flask (cracked wall)", "t-hollow", 51, 1, None, 0, 60).Touch(75, 20),
             C("thornwood: the den", "t-den", 38, 20, None).Exit(L),
+            C("thornwood: thornback's charm", "t-den", 38, 20, None).Touch(20, 19),
+            C("thornwood: up the old oak", "t-edge", 36, 20, None).Exit(U),
+            C("thornwood: trial of vines", "t-thicket", 29, 22, None, 0, Up).Via(24, 9, 30, 10).Touch(2, 6),
+            C("thornwood: back along the branches", "t-thicket", 2, 6, None).Exit(D),
             C("thornwood: the anvil (grips)", "t-anvil", 38, 20, None).Touch(8, 20),
             C("gate: smithy high door needs grips", "t-smithy", 30, 20, None).Exit(L).Gate(),
             C("gate: anvil chimney needs grips", "t-anvil", 8, 20, None).Exit(U).Gate(),
@@ -69,6 +87,12 @@ namespace HolyPeak.Verify
             C("abbey: nave", "a-nave", 1, 20, G).Exit(R),
             C("abbey: down the crypt to the bell", "a-crypt", 1, 20, G).Touch(20, 43),
             C("abbey: chapter house", "a-chapter", 6, 22, G, 0, Up).Exit(R),
+            C("abbey: down to the scriptorium", "a-crypt", 20, 43, G).Exit(D),
+            C("abbey: the scriptorium psalm", "a-scriptorium", 71, 0, G, 0, 60).Touch(50, 11),
+            C("abbey: out of the scriptorium", "a-scriptorium", 50, 11, G).Exit(U),
+            C("abbey: through the cracked floor", "a-scriptorium", 50, 11, G).Knowing(Spell.Star).Touch(5, 20),
+            C("abbey: climb out of the stacks", "a-scriptorium", 5, 20, G, 0, 0, "slab:a-scriptorium:30,12").Exit(U),
+            C("gate: the stacks need the falling star", "a-scriptorium", 50, 11, G).Touch(5, 20).Gate(),
             C("gate: cloister needs the bell", "a-cloister", 1, 12, G).Exit(R).Gate(),
 
             // ---- with the Bell of Resonance ----
@@ -82,6 +106,10 @@ namespace HolyPeak.Verify
             C("abbey: cloister glass floor (shortcut)", "a-cloister", 1, 12, GB).Exit(D),
             C("abbey: drop into the nave", "a-nave", 62, 1, GB, 0, 60).Exit(L),
             C("abbey: sanctum (after the abbot)", "a-sanctum", 1, 12, GB).Exit(U),
+            C("abbey: the abbot's charm", "a-sanctum", 24, 20, GB).Touch(20, 12),
+            C("abbey: up to the ringing loft", "a-cloister", 70, 12, GB).Exit(U, 70, 74),
+            C("abbey: the ringing loft", "a-loft", 72, 22, GB, 0, Up).Touch(5, 12),
+            C("abbey: down from the loft", "a-loft", 5, 12, GB).Exit(D),
             C("abbey: bell tower", "a-tower", 19, 45, GB, 0, Up).Exit(U),
             C("thornwood: canopy vessel", "t-canopy", 30, 22, GB, 0, Up).Touch(70, 14),
             C("thornwood: out of the canopy", "t-canopy", 70, 14, GB).Exit(D),
@@ -96,6 +124,14 @@ namespace HolyPeak.Verify
             C("frost: windway", "f-windway", 19, 22, GBK, 0, -150).Exit(R),
             C("frost: windway cache", "f-windway", 19, 22, GBK, 0, -150).Touch(12, 6),
             C("frost: wyrm's hollow", "f-hollow", 1, 20, GBK).Exit(R),
+            C("frost: the wyrm's charm", "f-hollow", 20, 20, GBK).Touch(30, 14),
+            C("frost: into the trial of chains", "f-windway", 12, 6, GBK).Exit(L),
+            C("frost: trial of chains", "f-chains", 78, 6, GBK).Via(72, 17, 76, 18).Via(26, 6, 31, 7).Touch(4, 6),
+            C("frost: back along the ice ledge", "f-chains", 4, 6, GBK).Exit(R),
+            C("frost: wind up the spire", "f-ledge", 30, 20, GBK).Exit(U),
+            C("frost: the spire psalm", "f-spire", 26, 22, GBK, 0, -150).Touch(4, 3),
+            C("frost: spire vessel", "f-spire", 26, 22, GBK, 0, -150).Touch(15, 9),
+            C("frost: down from the spire", "f-spire", 4, 3, GBK).Exit(D),
             C("frost: windward ascent", "f-ascent", 1, 20, GBK).Exit(U),
             C("gate: ascent needs the kite", "f-ascent", 1, 20, GB).Exit(U).Gate(),
             C("frost: icefall vessel", "f-icefall", 20, 20, GBK).Touch(36, 3),
@@ -103,8 +139,11 @@ namespace HolyPeak.Verify
             C("village: belfry flask", "v-belfry", 8, 22, GBK, 0, -150).Touch(31, 9),
             C("village: out of the belfry", "v-belfry", 31, 9, GBK).Exit(D),
             C("summit: high shrine", "s-shrine", 22, 22, GBK, 0, -150).Exit(L),
-            C("summit: stairs of light", "s-stairs", 78, 20, GBK).Exit(U),
-            C("summit: keeper's gate (after the keeper)", "s-gate", 19, 22, GBK, 0, Up).Exit(U),
+            C("summit: stairs of light", "s-stairs", 78, 20, GBK).Exit(U, 17, 22),
+            C("summit: wind to the last trial", "s-stairs", 66, 20, GBK).Exit(U, 70, 79),
+            C("summit: the last trial", "s-trial", 34, 45, GBK, 0, -150).Via(4, 26, 10, 27).Touch(32, 3),
+            C("summit: down from the last trial", "s-trial", 32, 3, GBK).Exit(D),
+            C("summit: keeper's gate (after the keeper)", "s-gate", 19, 22, GBK, 0, Up).Exit(U).Budget(4_000_000),
             C("summit: the great bell", "s-bell", 19, 22, GBK, 0, Up).Touch(28, 20),
         };
     }

@@ -85,6 +85,28 @@ namespace HolyPeak.Gfx
             "ooRRRRRRRoo.",
         };
 
+        private static readonly string[] BodyReach =   // arms raised to a rope
+        {
+            "..o.....o..",
+            ".odo...odo.",
+            ".odhhhhhdo.",
+            "oqrrrrrrrRo",
+            "oqrtttttrRo",
+            ".oqrrrrRRo.",
+            ".ooRRRRRoo.",
+        };
+
+        private static readonly string[] BodyCast =   // thrusting the staff forward
+        {
+            ".odhhhhhdoo",
+            "odhhhhhhhhd",
+            "oqrrrrrrrRo",
+            "oqrtttttrRo",
+            "oqrrrrrrRRo",
+            ".oqrrrrRRo.",
+            ".ooRRRRRoo.",
+        };
+
         private static readonly string[] BodyCrouch =
         {
             ".odhhhhhdo..",
@@ -105,6 +127,9 @@ namespace HolyPeak.Gfx
             ["fall"] = new[] { ".obo...obo.", ".oo.....oo.", "..........." },
             ["cling"] = new[] { "....obo.obo", "....oBo.oo.", "....ooo...." },
             ["kneel"] = new[] { ".obbbbo.obo", ".oooooo.ooo" },
+            ["tuck"] = new[] { "..obbbbo...", "..oooooo..." },
+            ["hang"] = new[] { "...obobo...", "...oBoBo...", "...ooooo..." },
+            ["stride"] = new[] { "obo.....obo", "oBo......oo", "oo........." },
         };
 
         private static void AddPilgrim(string name, string[] head, string[] body, string legs, int headY = 0, int bodyY = 7, int legY = 13, int headX = 0)
@@ -187,6 +212,12 @@ namespace HolyPeak.Gfx
             AddPilgrim("lookup", HoodUp, Body, "stand");
             AddPilgrim("kneel", Hood, BodyCrouch, "kneel", headY: 3, bodyY: 10, legY: 14);
             AddPilgrim("hurt", HoodBlink, BodyFlare, "fall", headX: -1);
+            AddPilgrim("hang", HoodUp, BodyReach, "hang", headY: 2, bodyY: 6, legY: 13);
+            AddPilgrim("vault", Hood, BodyFlare, "stride", headX: 1);
+            AddPilgrim("tuck", Hood, BodyCrouch, "tuck", headY: 3, bodyY: 10, legY: 14, headX: 1);
+            AddPilgrim("cast", Hood, BodyCast, "stand", headX: 1);
+            AddPilgrim("dive", HoodUp, BodyFlare, "jump");
+            AddNewCreatures();
 
             // ---- creatures ----
             Add("crawler0", BugPal,
@@ -405,6 +436,83 @@ namespace HolyPeak.Gfx
         }
 
         // ---- guardians ---------------------------------------------------------------------
+
+        private static void AddNewCreatures()
+        {
+            var boar = new Dictionary<char, Color>
+            {
+                ['o'] = G.Hex(0x1a0e0c), ['b'] = G.Hex(0x7a4a2e), ['B'] = G.Hex(0x4e2c1a), ['l'] = G.Hex(0xa86a3e),
+                ['t'] = G.Hex(0xf0e2c0), ['e'] = G.Hex(0xff6a3a), ['n'] = G.Hex(0x2e1a12),
+            };
+            Add("charger0", boar,
+                "....o.o.o.....",
+                "...oBoBoBoo...",
+                "..oblllllbbo..",
+                ".obbbbbbbbbbo.",
+                "obbbbbbbbbbleo",
+                "oBbbbbbbbbbbbo",
+                "oBBbbbbbbbbbno",
+                ".oBBBBBBBBotto",
+                ".obo.oo.obo.o.",
+                ".oo..oo..oo...");
+            Add("charger1", boar,
+                "....o.o.o.....",
+                "...oBoBoBoo...",
+                "..oblllllbbo..",
+                ".obbbbbbbbbbo.",
+                "obbbbbbbbbbleo",
+                "oBbbbbbbbbbbbo",
+                "oBBbbbbbbbbbno",
+                ".oBBBBBBBBotto",
+                "..obo.oo.obo..",
+                "..oo...oo.oo..");
+            Add("charger2", boar,   // head down, charging
+                "..o.o.o.......",
+                ".oBoBoBoo.....",
+                "oblllllbbo....",
+                "obbbbbbbbboo..",
+                "oBbbbbbbbbbbo.",
+                "oBbbbbbbbbbleo",
+                "oBBbbbbbbbbbno",
+                ".oBBBBBBBBottt",
+                "obo.oo..oo.oo.",
+                "oo..o....o....");
+            var ghost = new Dictionary<char, Color>
+            {
+                ['o'] = G.Hex(0x1e1a34), ['w'] = G.Hex(0xd8d4f0), ['W'] = G.Hex(0x9a94c8), ['d'] = G.Hex(0x5a5488),
+                ['f'] = G.Hex(0x0d0a14), ['y'] = G.Hex(0xffe08a), ['g'] = G.Hex(0xf0c04c),
+            };
+            Add("chorister0", ghost,
+                "...oooo...",
+                "..owwwWo..",
+                ".owwfffWo.",
+                ".owfyfyfo.",
+                ".owffffWo.",
+                ".owWfffWo.",
+                "..oWWWWo..",
+                ".owwwwwWo.",
+                "owwwgwwWWo",
+                "owwwgwwWWo",
+                "owwWgwWWdo",
+                ".oWWWWWdo.",
+                ".owo.owdo.",
+                "..o...oo..");
+            Add("chorister1", ghost,   // singing: mouth open, the book held high
+                "...oooo...",
+                "..owwwWo..",
+                ".owwfffWo.",
+                ".owfyfyfo.",
+                ".owffyfWo.",
+                ".owWfyfWo.",
+                "o.oWWWWo.o",
+                "gowwwwwWog",
+                "owwwwwwWWo",
+                "owwwwwwWWo",
+                "owwWwwWWdo",
+                ".oWWWWWdo.",
+                "..owo.odo.",
+                "...o...o..");
+        }
 
         private static void AddBossArt()
         {
@@ -863,6 +971,34 @@ namespace HolyPeak.Gfx
                 ".ocCCrRCCCo.",
                 "..ooorRooo..",
                 ".....oo.....");
+            Add("lectern", stone,
+                "..oooooooo..",
+                ".occcoocccoo",
+                "oocccoocccoo",
+                ".ooooooooo..",
+                "....olso....",
+                "....olSo....",
+                "....olSo....",
+                "....olSo....",
+                "....olSo....",
+                "...ollssSo..",
+                "..oooooooo..");
+            Add("grace", new Dictionary<char, Color>
+            {
+                ['o'] = G.Hex(0x1b1630), ['g'] = G.Hex(0xc8e0f0), ['G'] = G.Hex(0x7aa0c0), ['w'] = G.Hex(0xffffff),
+                ['y'] = G.Hex(0xffe2a8), ['Y'] = G.Hex(0xffb23e), ['m'] = G.Hex(0xb88a3a), ['M'] = G.Hex(0xf0c86a),
+            },
+                "...ooo...",
+                "...oMo...",
+                "..ooooo..",
+                ".oggggGo.",
+                "ogwyyyyGo",
+                "ogyyYyyGo",
+                "ogyYwYyGo",
+                "ogyyYyyGo",
+                ".oGyyyGo.",
+                "..ooooo..");
+            AddCharms();
             Add("grips", new Dictionary<char, Color>
             {
                 ['o'] = G.Hex(0x1b1630), ['i'] = G.Hex(0x8a8aa0), ['I'] = G.Hex(0xd0d0e0), ['d'] = G.Hex(0x4a4a60), ['b'] = G.Hex(0x6a4428),
@@ -874,6 +1010,185 @@ namespace HolyPeak.Gfx
                 "obbbbbdo",
                 "obbbbbdo",
                 ".oooooo.");
+        }
+
+        // ---- charms -------------------------------------------------------------------------
+
+        private static void AddCharms()
+        {
+            var pal = new Dictionary<char, Color>
+            {
+                ['o'] = G.Hex(0x1b1630), ['g'] = G.Hex(0xf0c04c), ['G'] = G.Hex(0xa8782a), ['w'] = G.Hex(0xfff3d0),
+                ['r'] = G.Hex(0xe8452c), ['y'] = G.Hex(0xffb23e), ['l'] = G.Hex(0xc8c8dc), ['d'] = G.Hex(0x6a6480),
+                ['n'] = G.Hex(0x6a4428), ['N'] = G.Hex(0xc08a50), ['v'] = G.Hex(0x9bd06a), ['V'] = G.Hex(0x4f7a2e),
+                ['p'] = G.Hex(0xc8b0ff), ['P'] = G.Hex(0x7a5ab0), ['b'] = G.Hex(0x9fe8ff), ['B'] = G.Hex(0x3c6aa6),
+            };
+            Add("charm_stride", pal,
+                "......oo...",
+                ".....owwo..",
+                "....owwlo..",
+                "...owwlo...",
+                "...onNo....",
+                "..onNNo....",
+                ".onNNNo....",
+                "onNNNNNooo.",
+                "onnnnnnnNNo",
+                ".ooooooooo.",
+                "...........");
+            Add("charm_feather", pal,
+                "........oo.",
+                ".......owo.",
+                "......owwo.",
+                ".....owwlo.",
+                "....owwlo..",
+                "...owwlo...",
+                "..owwlo....",
+                "..owlo.....",
+                ".odoo......",
+                "od.........",
+                "o..........");
+            Add("charm_votive", pal,
+                "....oyo....",
+                "...oywyo...",
+                "....oro....",
+                ".ooooooooo.",
+                ".ogggggGGo.",
+                "..oggggGo..",
+                "...oggGo...",
+                "....oGo....",
+                "....oGo....",
+                "..ogggGGo..",
+                "..ooooooo..");
+            Add("charm_ember", pal,
+                "...ooooo...",
+                "..oGgggGo..",
+                ".oGo.o.oGo.",
+                "oGo.oro.oGo",
+                "og.oryro.go",
+                "og.orwro.go",
+                "oGo.owo.oGo",
+                ".oGo...oGo.",
+                "..oGgggGo..",
+                "...ooooo...");
+            Add("charm_longstaff", pal,
+                "........ooo",
+                "........oyo",
+                ".......oyyo",
+                "......onoo.",
+                ".....ono...",
+                "....ono....",
+                "...ono.....",
+                "..ono......",
+                ".ono.......",
+                "ono........",
+                "oo.........");
+            Add("charm_quickstaff", pal,
+                "o.o......oo",
+                ".o.o....ogo",
+                "o.o....ono.",
+                ".o....ono..",
+                ".....ono...",
+                "....ono....",
+                "...ono.o.o.",
+                "..ono.o.o..",
+                ".ono...o.o.",
+                "ono........",
+                "oo.........");
+            Add("charm_prayer", pal,
+                "....owo....",
+                "...owwwo...",
+                "....owo....",
+                "...........",
+                "oo.......oo",
+                "oNo.....oNo",
+                "oNNo...oNNo",
+                ".oNNo.oNNo.",
+                "..oNNoNNo..",
+                "...oNNNo...",
+                "....ooo....");
+            Add("charm_psalter", pal,
+                "...........",
+                ".ooooooooo.",
+                "oPpppopppPo",
+                "oPpwwowwpPo",
+                "oPpppopppPo",
+                "oPpwwowwpPo",
+                "oPpppopppPo",
+                "oPpwpopwpPo",
+                "oPPPPoPPPPo",
+                ".ooooooooo.",
+                "...........");
+            Add("charm_bramble", pal,
+                "..o.ooo.o..",
+                ".ovoVVVovo.",
+                "..oV...Vo..",
+                "ooV.....Voo",
+                "oVo.....oVo",
+                "oV.......Vo",
+                "oVo.....oVo",
+                "ooV.....Voo",
+                "..oV...Vo..",
+                ".ovoVVVovo.",
+                "..o.ooo.o..");
+            Add("charm_clasp", pal,
+                "..o.o.o....",
+                ".owowowo...",
+                ".olllllo...",
+                ".olwlllo...",
+                ".olllllooo.",
+                ".odddddolo.",
+                ".odddddolo.",
+                ".odddddoo..",
+                ".odddddo...",
+                "..ooooo....",
+                "...........");
+            Add("charm_echo", pal,
+                "....ooo....",
+                "...ogggo...",
+                "..ogwggGo..",
+                "..oggggGo..",
+                ".ogggggGGo.",
+                ".ogggggGGo.",
+                "oGGGGGGGGGo",
+                ".ooooooooo.",
+                "o...ono...o",
+                ".o..ooo..o.",
+                "...........");
+            Add("charm_vigil", pal,
+                ".....o.....",
+                "....oro....",
+                "...oryro...",
+                "...oywyo...",
+                "....oyo....",
+                "...ooooo...",
+                "...owlwo...",
+                "...ollwo...",
+                "...ollwo...",
+                "..ooooooo..",
+                "..oGgggGo..");
+            Add("charm_ward", pal,
+                ".ooooooooo.",
+                ".olllllllo.",
+                ".olwlolllo.",
+                ".olloVollo.",
+                ".oloVVVolo.",
+                ".olloVollo.",
+                "..olllldo..",
+                "..olllldo..",
+                "...olldo...",
+                "....odo....",
+                ".....o.....");
+            Add("notch", pal,
+                "...ooooo...",
+                "..oPpppPo..",
+                ".oPpwwwpPo.",
+                "oPpwo.owpPo",
+                "oPpo...opPo",
+                "oPpo...opPo",
+                "oPpwo.owpPo",
+                ".oPpwwwpPo.",
+                "..oPpppPo..",
+                "...ooooo...");
         }
 
         // ---- helpers -----------------------------------------------------------------------

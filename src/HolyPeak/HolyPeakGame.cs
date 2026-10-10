@@ -25,6 +25,7 @@ namespace HolyPeak
         public string DumpSprites;       // write the sprite atlas to this PNG
         public bool Peaceful;            // no creatures or guardians (to replay verifier routes)
         public bool AutoFight;           // a crude bot fights whatever is nearest
+        public bool NoHints;             // hide the hint texts (for clean screenshots)
     }
 
     public sealed class HolyPeakGame : Game
@@ -95,6 +96,7 @@ namespace HolyPeak
             if (!string.IsNullOrEmpty(dataDir)) Storage.OverrideFolder = dataDir;
             else if (Auto != null) Storage.OverrideFolder = Path.Combine(Path.GetTempPath(), "holypeak-auto-" + Environment.ProcessId);
             Settings = Storage.Load<Settings>("settings.json");
+            Input.ApplyBindings(Settings);
             Save = Storage.Load<SaveData>("save.json");
             if (Auto != null && Auto.Invincible) Settings.Invincible = true;
             ApplyVideo();

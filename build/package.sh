@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${1:-2.0.0}"
+VERSION="${1:-2.1.0}"
 shift || true
 RIDS=("$@")
 [ ${#RIDS[@]} -eq 0 ] && RIDS=(win-x64 linux-x64 osx-arm64 osx-x64)

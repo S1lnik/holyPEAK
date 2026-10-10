@@ -99,12 +99,14 @@ namespace HolyPeak.Scenes
                 case View.ConfirmNew: _confirm.Update(dt); break;
                 case View.Options: _options.Update(dt); break;
                 case View.Controls:
+                    if (OptionsMenu.UpdateControls(dt)) _view = View.Options;
+                    break;
                 case View.Credits:
                     if (Input.Confirm.Pressed || Input.Back.Pressed)
                     {
                         Input.Confirm.Consume(); Input.Back.Consume();
                         AudioManager.Play("back", 0.7f);
-                        _view = _view == View.Controls ? View.Options : View.Main;
+                        _view = View.Main;
                     }
                     break;
             }
@@ -217,9 +219,14 @@ namespace HolyPeak.Scenes
                     break;
             }
 
-            font.Draw(sb, "v2.0", new Vector2(G.ViewW - 20, G.ViewH - 10), new Color(120, 120, 150) * ma);
-            string help = Input.Format(_view == View.Main ? "{CONFIRM} select" : "{CONFIRM} select   " + Input.BackName + " back");
-            font.Draw(sb, help, new Vector2(4, G.ViewH - 10), new Color(120, 120, 150) * ma);
+            if (_view != View.Controls)   // the controls screen fills the frame and has its own hints
+            {
+                var v = typeof(TitleScene).Assembly.GetName().Version;
+                string ver = $"v{v.Major}.{v.Minor}";
+                font.Draw(sb, ver, new Vector2(G.ViewW - font.Measure(ver) - 4, G.ViewH - 10), new Color(120, 120, 150) * ma);
+                string help = Input.Format(_view == View.Main ? "{CONFIRM} select" : "{CONFIRM} select   " + Input.BackName + " back");
+                font.Draw(sb, help, new Vector2(4, G.ViewH - 10), new Color(120, 120, 150) * ma);
+            }
             sb.End();
         }
 

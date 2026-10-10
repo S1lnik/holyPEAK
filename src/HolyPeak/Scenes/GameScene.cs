@@ -18,7 +18,7 @@ namespace HolyPeak.Scenes
     public sealed partial class GameScene : Scene
     {
         private enum Phase { Prologue, Playing, Fading, Dying, Ability, Ending }
-        private enum Overlay { None, Pause, Map, Dialogue, Shop }
+        private enum Overlay { None, Pause, Map, Dialogue, Shop, Charms }
 
         private static readonly Backdrop[] Backdrops = new Backdrop[5];
         private static readonly int[] PeakHeight = { 50, 58, 72, 86, 0 };
@@ -113,7 +113,7 @@ namespace HolyPeak.Scenes
                     {
                         MoveX = sbyte.Parse(p[0]), MoveY = sbyte.Parse(p[1]),
                         Jump = b[0] == '1', JumpPressed = b[1] == '1', StrikePressed = b[2] == '1', TollPressed = b[3] == '1',
-                        Heal = b.Length > 4 && b[4] == '1', InteractPressed = b.Length > 5 && b[5] == '1',
+                        Heal = b.Length > 4 && b[4] == '1', InteractPressed = b.Length > 5 && b[5] == '1', CastPressed = b.Length > 6 && b[6] == '1',
                     });
                 }
             }
@@ -122,10 +122,12 @@ namespace HolyPeak.Scenes
 
         public override void Begin()
         {
+            var worn = Equipped();
+            int maxHp = Save.MaxHp + ((worn & Charm.Vigil) != 0 ? 1 : 0);
             _carry = new PlayerSim
             {
-                Hp = Save.MaxHp, MaxHp = Save.MaxHp, Flasks = Save.MaxFlasks, MaxFlasks = Save.MaxFlasks,
-                Damage = Save.Damage, Ab = Progress.AbilitiesFrom(_flags), Facing = 1,
+                Hp = maxHp, MaxHp = maxHp, Grace = Save.MaxGrace, MaxGrace = Save.MaxGrace,
+                Damage = Save.Damage, Ab = Progress.AbilitiesFrom(_flags), Ch = worn, Sp = Charms.Spells(_flags), Facing = 1,
             };
             if (_autoRoom != null)
             {
@@ -162,7 +164,7 @@ namespace HolyPeak.Scenes
         public override void OnQuit()
         {
             if (Game.Auto != null && _room?.Boss != null) Console.WriteLine($"[auto] boss {_room.Boss.Id} hp {_room.Boss.Hp}/{_room.Boss.MaxHp} phase {_room.Boss.Phase}");
-            if (Game.Auto != null && _room != null) Console.WriteLine($"[auto] end: kills {Save.Kills} embers {Save.Embers} hp {_room.P.Hp}/{_room.P.MaxHp} flasks {_room.P.Flasks} alive {_room.Enemies.Count(e => e.Alive)}/{_room.Enemies.Length}");
+            if (Game.Auto != null && _room != null) Console.WriteLine($"[auto] end: kills {Save.Kills} embers {Save.Embers} hp {_room.P.Hp}/{_room.P.MaxHp} grace {_room.P.Grace}/{_room.P.MaxGrace} alive {_room.Enemies.Count(e => e.Alive)}/{_room.Enemies.Length}");
             Persist();
         }
 
@@ -181,12 +183,27 @@ namespace HolyPeak.Scenes
             if (_room != null)
             {
                 Save.Room = _room.Def.Id;
-                Save.MaxHp = _room.P.MaxHp;
-                Save.MaxFlasks = _room.P.MaxFlasks;
+                Save.MaxHp = _room.P.MaxHp - (_room.P.Wears(Charm.Vigil) ? 1 : 0);
+                Save.MaxGrace = _room.P.MaxGrace;
                 Save.Damage = _room.P.Damage;
+                Save.Equipped = Charms.All.Where(c => _room.P.Wears(c.Charm)).Select(c => c.Id).ToList();
             }
             if (Cfg.AssistActive) Save.UsedAssist = true;
             Game.WriteSave();
+        }
+
+        /// <summary>The charms worn, as saved (only charms actually owned count).</summary>
+        private Charm Equipped()
+        {
+            var worn = Charm.None;
+            var owned = Charms.Owned(_flags);
+            foreach (var id in Save.Equipped)
+            {
+                var c = Charms.Get(id);
+                if (c != null && (owned & c.Charm) != 0) worn |= c.Charm;
+            }
+            if (Charms.Used(worn) > Charms.Notches(_flags)) worn = Charm.None;
+            return worn;
         }
 
         // ---- rooms -------------------------------------------------------------------------
@@ -199,7 +216,6 @@ namespace HolyPeak.Scenes
             _room = new Room(def, _flags, noEnemies: Game.Auto?.Peaceful == true)
             {
                 Invincible = Cfg.Invincible,
-                EmberCharm = _flags.Contains("bought:charm"),
             };
             if (Save.ShadeRoom == def.Id && Save.ShadeEmbers > 0) _room.AddShade(Save.ShadeX, Save.ShadeY);
             Point? spawn = null;
@@ -209,14 +225,18 @@ namespace HolyPeak.Scenes
             var region = Atlas.Region(def.Region);
             bool newRegion = _region != region;
             _region = region;
-            _st = Style.Regions[region.Style];
-            Backdrops[region.Style] ??= new Backdrop(_st, PeakHeight[region.Style], 0.64f, PeakHaze[region.Style]);
+            // a room can borrow another region's look (the village's chapel is built of abbey stone)
+            int look = int.TryParse(def.Prop("look"), out int l) ? l : region.Style;
+            bool newLook = _st == null || _st.Id != look;
+            _st = Style.Regions[look];
+            Backdrops[look] ??= new Backdrop(_st, PeakHeight[look], 0.64f, PeakHaze[look]);
             _wr = new WorldRenderer(_room, _st) { ShrineActive = Save.ShrineRoom == def.Id };
             _pv.HasBell = _room.P.Has(Abilities.Bell);
             _pv.Reset(_room.P);
             _parts.Clear();
             _rings.Clear();
             SnapCamera();
+            if (newLook && !newRegion) InitAmbient();
             if (newRegion)
             {
                 InitAmbient();
@@ -274,6 +294,19 @@ namespace HolyPeak.Scenes
                 var r = _rings[i];
                 r.t += dt;
                 if (r.t > 0.45f) _rings.RemoveAt(i); else _rings[i] = r;
+            }
+            _graceDeny = Math.Max(0, _graceDeny - dt);
+            for (int i = _waves.Count - 1; i >= 0; i--)
+            {
+                var w = _waves[i];
+                w.t += dt;
+                if (w.t > 0.35f) _waves.RemoveAt(i); else _waves[i] = w;
+            }
+            for (int i = _pillars.Count - 1; i >= 0; i--)
+            {
+                var pl = _pillars[i];
+                pl.t += dt;
+                if (pl.t > 0.4f) _pillars.RemoveAt(i); else _pillars[i] = pl;
             }
 
             UpdateFade(dt);
@@ -384,6 +417,18 @@ namespace HolyPeak.Scenes
                 if (dy < -14 && Math.Abs(dx) < 20) inp.MoveY = -1;
                 else if (dy > 14 && !p.OnGround) inp.MoveY = 1;
             }
+            // spend grace: heal when low and nothing is close, otherwise burn it on spells
+            bool spare = p.Grace >= PlayerSim.SpellCost;
+            if (spare && p.Hp <= 2 && !near && p.OnGround && Math.Abs(dx) > 70)
+            {
+                inp = new PlayerInput { Heal = true };
+                return inp;
+            }
+            if (spare && p.Hp > 2 && _botT % 30 == 15 && p.Sp != Spell.None)
+            {
+                if (dy < -30 && Math.Abs(dx) < 16 && p.Knows(Spell.Psalm)) { inp.CastPressed = true; inp.MoveY = -1; inp.StrikePressed = false; }
+                else if (Math.Abs(dy) < 18 && Math.Abs(dx) > 30 && p.Facing == Math.Sign(dx)) { inp.CastPressed = true; inp.MoveY = 0; inp.StrikePressed = false; }
+            }
             return inp;
         }
 
@@ -404,6 +449,7 @@ namespace HolyPeak.Scenes
                 JumpPressed = Input.Jump.Pressed,
                 StrikePressed = Input.Strike.Pressed,
                 TollPressed = Input.Toll.Pressed,
+                CastPressed = Input.Cast.Pressed,
                 Heal = Input.Heal.Down,
                 InteractPressed = Input.Up.Pressed,
             };
@@ -429,6 +475,7 @@ namespace HolyPeak.Scenes
                 _held.StrikePressed |= inp.StrikePressed;
                 _held.TollPressed |= inp.TollPressed;
                 _held.InteractPressed |= inp.InteractPressed;
+                _held.CastPressed |= inp.CastPressed;
                 if (_replay != null) _replayIdx--;
                 return;
             }
@@ -436,6 +483,7 @@ namespace HolyPeak.Scenes
             inp.StrikePressed |= _held.StrikePressed;
             inp.TollPressed |= _held.TollPressed;
             inp.InteractPressed |= _held.InteractPressed;
+            inp.CastPressed |= _held.CastPressed;
             _held = default;
 
             // Hold up or down while standing still to look around.
@@ -466,7 +514,7 @@ namespace HolyPeak.Scenes
             if (_ambT > 0) return;
             var rng = _parts.Rng;
             _ambT = rng.Range(4f, 10f);
-            string snd = _region.Style switch { 0 => "bird", 1 => "bird", 2 => "drip", 4 => "chime", _ => null };
+            string snd = _st.Id switch { 0 => "bird", 1 => "bird", 2 => "drip", 4 => "chime", _ => null };
             if (snd == null) return;
             AudioManager.Play(snd, rng.Range(0.1f, 0.22f), rng.Range(-0.35f, 0.15f), rng.Range(-0.8f, 0.8f));
         }
@@ -536,10 +584,75 @@ namespace HolyPeak.Scenes
                 switch (e.Type)
                 {
                     case Ev.Jump: case Ev.Leap: case Ev.Land: case Ev.Cling: case Ev.Swing: case Ev.Pogo:
-                    case Ev.GlideOpen: case Ev.HealStart: case Ev.Heal:
+                    case Ev.GlideOpen: case Ev.HealStart: case Ev.Heal: case Ev.Mantle: case Ev.Vault: case Ev.RopeGrab: case Ev.RopeJump:
+                    case Ev.Cast:
                         _pv.OnEvent(e, _room.P, _parts, _st);
                         if (e.Type == Ev.Pogo) Freeze(0.02f);
+                        if (e.Type == Ev.Cast) CastEffect(e);
                         break;
+
+                    case Ev.NoGrace:
+                        AudioManager.Play("nograce", 0.5f);
+                        _graceDeny = 0.5f;
+                        break;
+                    case Ev.SpellHit:
+                        AudioManager.Play("spellhit", 0.6f, pitchVariance: 0.1f);
+                        Freeze(0.03f);
+                        _parts.Burst(e.Pos, 8, WorldRenderer.SpellColor, 30, 90, 0.35f, 1, 0, 3, additive: true);
+                        break;
+                    case Ev.StarLand:
+                    {
+                        AudioManager.Play("starland", 0.9f);
+                        Freeze(0.05f);
+                        Shake(0.3f, 3f);
+                        Rumble(0.6f, 0.25f);
+                        var area = Room.StarArea(_room.P);
+                        _waves.Add((e.Pos, 0f, area.Width / 2f));
+                        for (int i = 0; i < 26; i++)
+                        {
+                            float side = i % 2 == 0 ? -1 : 1;
+                            _parts.Emit(e.Pos + new Vector2(side * rng.Range(0, 6), -1), new Vector2(side * rng.Range(60, 200), rng.Range(-60, -5)), rng.Chance(0.5f) ? WorldRenderer.SpellColor : Color.White, rng.Range(0.3f, 0.6f), 1, drag: 3, additive: true);
+                        }
+                        break;
+                    }
+                    case Ev.Bramble:
+                        AudioManager.Play("bramble", 0.8f);
+                        for (int i = 0; i < 16; i++)
+                        {
+                            float a = i / 16f * Calc.Tau;
+                            _parts.Emit(e.Pos, new Vector2(MathF.Cos(a), MathF.Sin(a)) * 150f, G.Hex(0x9bd06a), 0.25f, 2, PShape.Line, drag: 5);
+                        }
+                        break;
+                    case Ev.Lantern:
+                        AudioManager.Play("lantern", 0.8f, pitchVariance: 0.05f);
+                        Freeze(0.035f);
+                        Shake(0.08f, 1f);
+                        _parts.Burst(e.Pos, 12, WorldRenderer.LanternColor, 30, 110, 0.4f, 1, 60, 3, additive: true);
+                        _parts.Emit(e.Pos, Vector2.Zero, WorldRenderer.LanternColor * 0.7f, 0.25f, 4, PShape.Glow, sizeEnd: 34, additive: true);
+                        _pv.OnEvent(e, _room.P, _parts, _st);
+                        break;
+                    case Ev.CrumbleShake:
+                        AudioManager.Play("crumble", 0.45f, pitchVariance: 0.1f, pan: Pan(e.Pos));
+                        break;
+                    case Ev.CrumbleFall:
+                    {
+                        AudioManager.Play("crumblefall", 0.6f, pitchVariance: 0.08f, pan: Pan(e.Pos));
+                        var g = _room.Groups[e.Index];
+                        var r = g.Rect;
+                        for (int i = 0; i < r.Width / 2; i++)
+                            _parts.Emit(new Vector2(r.X + rng.Range(0, r.Width), r.Y + rng.Range(0, r.Height)), new Vector2(rng.Range(-20, 20), rng.Range(-20, 30)),
+                                        rng.Chance(0.5f) ? _st.Base : _st.Light, rng.Range(0.5f, 0.9f), rng.Chance(0.3f) ? 2 : 1, gravity: 300);
+                        break;
+                    }
+                    case Ev.CrumbleReform:
+                    {
+                        AudioManager.Play("reform", 0.35f, pan: Pan(e.Pos));
+                        var r = _room.Groups[e.Index].Rect;
+                        _parts.Burst(new Vector2(r.Center.X, r.Y + 2), 6, _st.Light2, 10, 30, 0.4f, 1, 0, 3);
+                        break;
+                    }
+                    case Ev.CharmFound: StartPanel(PanelKind.Charm, e.Index, e.Pos); break;
+                    case Ev.PsalmLearned: StartPanel(PanelKind.Spell, e.Index, e.Pos); break;
 
                     case Ev.Hurt:
                         Freeze(0.16f);
@@ -658,10 +771,10 @@ namespace HolyPeak.Scenes
                         Freeze(0.12f);
                         _flash = 0.4f; _flashColor = G.Hex(0xffe0b0);
                         _parts.Burst(e.Pos, 20, G.Hex(0xffd070), 30, 100, 0.8f, 1, -20, 2, additive: true);
-                        Toast(e.Index == 0 ? "Vessel of Vigil: your vigil grows." : "Balm Flask: one more flask of balm.", G.Hex(0xffd9a0));
+                        Toast(e.Index == 0 ? "Vessel of Vigil: your vigil grows." : "Grace Vessel: you can hold more grace.", G.Hex(0xffd9a0));
                         Persist();
                         break;
-                    case Ev.Ability: StartAbility(e); break;
+                    case Ev.Ability: StartPanel(PanelKind.Ability, e.Index, e.Pos); break;
                     case Ev.Interact: Interact(e.Index); break;
                     case Ev.ShadeReclaim:
                         Save.Embers += Save.ShadeEmbers;
@@ -703,11 +816,22 @@ namespace HolyPeak.Scenes
                         break;
                     case Ev.EnemyJump: AudioManager.Play("hop", 0.4f, pitchVariance: 0.1f, pan: Pan(e.Pos)); break;
                     case Ev.EnemyLand:
+                        if (e.Index == 1)
+                        {
+                            // a boarlet ran headlong into a wall
+                            AudioManager.Play("crash", 0.6f, 0.3f, pan: Pan(e.Pos));
+                            Shake(0.2f, 2f);
+                            _parts.Burst(e.Pos, 8, Color.White, 30, 80, 0.3f, 1, 0, 3);
+                            break;
+                        }
                         AudioManager.Play("thud", 0.35f, pitchVariance: 0.1f, pan: Pan(e.Pos));
                         _parts.Burst(e.Pos, 4, G.Mix(_st.Light2, _st.Base, 0.4f), 10, 30, 0.3f, 1, 0, 4, spread: MathF.PI, dir: -MathF.PI / 2);
                         break;
                     case Ev.EnemyLunge: AudioManager.Play("lunge", 0.55f, pitchVariance: 0.08f, pan: Pan(e.Pos)); break;
-                    case Ev.Shoot: AudioManager.Play(e.Index == 1 ? "fire" : "spit", 0.5f, pitchVariance: 0.1f, pan: Pan(e.Pos)); break;
+                    case Ev.Shoot:
+                        if (e.Index == 2) AudioManager.Play("toll", 0.45f, 0.35f, pan: Pan(e.Pos));   // a chorister's note
+                        else AudioManager.Play(e.Index == 1 ? "fire" : "spit", 0.5f, pitchVariance: 0.1f, pan: Pan(e.Pos));
+                        break;
 
                     case Ev.BossStart: StartBoss(); break;
                     case Ev.BossHit:
@@ -748,7 +872,8 @@ namespace HolyPeak.Scenes
         private static Color EnemyColor(EnemyType t) => t switch
         {
             EnemyType.Crawler => G.Hex(0x648a3e), EnemyType.Hopper => G.Hex(0x8e6aa2), EnemyType.Wisp => G.Hex(0x7fd8ff),
-            EnemyType.Sentinel => G.Hex(0xb8b8cc), EnemyType.Spitter => G.Hex(0x8cc05a), _ => G.Hex(0x9fdcff),
+            EnemyType.Sentinel => G.Hex(0xb8b8cc), EnemyType.Spitter => G.Hex(0x8cc05a), EnemyType.Charger => G.Hex(0x7a4a2e),
+            EnemyType.Chorister => G.Hex(0xd8d4f0), _ => G.Hex(0x9fdcff),
         };
 
         private static Color PopColor(ProjType t) => t switch
@@ -776,7 +901,7 @@ namespace HolyPeak.Scenes
         {
             ref var p = ref _room.P;
             p.Hp = p.MaxHp;
-            p.Flasks = p.MaxFlasks;
+            p.Grace = p.MaxGrace;
             Save.ShrineRoom = _room.Def.Id;
             _wr.ShrineActive = true;
             AudioManager.Play("rest", 0.8f);
@@ -786,6 +911,7 @@ namespace HolyPeak.Scenes
             _parts.Emit(c, Vector2.Zero, G.Hex(0xffd070) * 0.5f, 0.6f, 8, PShape.Glow, sizeEnd: 70, additive: true);
             Toast("You rest. The shrine will remember you.", G.Hex(0xffe8c0));
             Persist();
+            if (Charms.Owned(_flags) != Charm.None) OpenCharms(true);
         }
 
         // ---- hazards, death and the lingering flame -----------------------------------------
@@ -845,7 +971,7 @@ namespace HolyPeak.Scenes
                     }
                     var p = _room.P;
                     p.Hp = p.MaxHp;
-                    p.Flasks = p.MaxFlasks;
+                    p.Grace = p.MaxGrace;
                     p.Invuln = 0;
                     _room.P = p;
                     var shrine = Save.ShrineRoom != null ? Atlas.Get(Save.ShrineRoom) : null;
@@ -860,25 +986,95 @@ namespace HolyPeak.Scenes
             }
         }
 
-        // ---- abilities ---------------------------------------------------------------------
+        // ---- relics, spells and charms: the "you found something" panel -----------------------
 
-        private void StartAbility(in GameEvent e)
+        private enum PanelKind { Ability, Spell, Charm }
+        private PanelKind _panelKind;
+        private string _panelName, _panelIcon;
+        private string[] _panelLines;
+
+        private void StartPanel(PanelKind kind, int index, Vector2 pos)
         {
             _phase = Phase.Ability;
             _phaseT = 0;
-            _gotAbility = (Abilities)e.Index;
-            _pv.HasBell = _room.P.Has(Abilities.Bell);
-            AudioManager.Play("ability", 0.9f);
+            _panelKind = kind;
+            Color burst = G.Hex(0xfff0c0);
+            switch (kind)
+            {
+                case PanelKind.Ability:
+                    _gotAbility = (Abilities)index;
+                    (_panelName, _panelLines) = Lore.AbilityInfo(_gotAbility);
+                    _panelIcon = null;
+                    _pv.HasBell = _room.P.Has(Abilities.Bell);
+                    AudioManager.Play("ability", 0.9f);
+                    break;
+                case PanelKind.Spell:
+                    (_panelName, _panelLines) = Charms.SpellInfo((Spell)index);
+                    _panelIcon = null;
+                    burst = WorldRenderer.SpellColor;
+                    AudioManager.Play("ability", 0.9f, 0.15f);
+                    break;
+                default:
+                    if (index < 0)
+                    {
+                        _panelName = "Charm Notch";
+                        _panelLines = new[] { "You can wear one more charm's worth.", "Change your charms when you rest at a shrine." };
+                        _panelIcon = null;
+                    }
+                    else
+                    {
+                        var c = Charms.All[index];
+                        _panelName = c.Name;
+                        _panelLines = new[] { c.Desc, "Wear it by resting at a shrine." };
+                        _panelIcon = "charm_" + c.Id;
+                    }
+                    burst = G.Hex(0xc8b0ff);
+                    AudioManager.Play("charm", 0.9f);
+                    break;
+            }
             AudioManager.Duck(0.25f);
             _flash = 0.7f; _flashColor = G.Hex(0xfff3d0);
             Shake(0.4f, 2f);
             for (int i = 0; i < 28; i++)
             {
                 float a = i / 28f * Calc.Tau;
-                _parts.Emit(e.Pos, new Vector2(MathF.Cos(a), MathF.Sin(a)) * 120f, G.Hex(0xfff0c0), 0.9f, 2, PShape.Disc, drag: 3, sizeEnd: 0.5f, additive: true);
+                _parts.Emit(pos, new Vector2(MathF.Cos(a), MathF.Sin(a)) * 120f, burst, 0.9f, 2, PShape.Disc, drag: 3, sizeEnd: 0.5f, additive: true);
             }
-            if (Game.Auto != null) Console.WriteLine($"[auto] ABILITY {_gotAbility}");
+            if (Game.Auto != null) Console.WriteLine($"[auto] FOUND {kind} {_panelName}");
             Persist();
+        }
+
+        // ---- spells --------------------------------------------------------------------------
+
+        private float _graceDeny;
+        private readonly List<(Vector2 pos, float t, float half)> _waves = new List<(Vector2, float, float)>();
+        private readonly List<(Rectangle area, float t)> _pillars = new List<(Rectangle, float)>();
+
+        private void CastEffect(in GameEvent e)
+        {
+            var rng = _parts.Rng;
+            var p = _room.P;
+            switch ((Spell)e.Index)
+            {
+                case Spell.Bolt:
+                    AudioManager.Play("bolt", 0.8f, pitchVariance: 0.05f);
+                    Shake(0.08f, 1f);
+                    _parts.Emit(p.Center + new Vector2(p.Facing * 8, -2), Vector2.Zero, WorldRenderer.SpellColor * 0.8f, 0.2f, 4, PShape.Glow, sizeEnd: 24, additive: true);
+                    break;
+                case Spell.Psalm:
+                {
+                    AudioManager.Play("psalm", 0.9f);
+                    Shake(0.2f, 1.5f);
+                    var a = Room.PsalmArea(p);
+                    _pillars.Add((a, 0f));
+                    for (int i = 0; i < 24; i++)
+                        _parts.Emit(new Vector2(a.X + rng.Range(0, a.Width), a.Bottom - rng.Range(0, 8)), new Vector2(rng.Range(-10, 10), rng.Range(-260, -120)), rng.Chance(0.5f) ? WorldRenderer.SpellColor : Color.White, rng.Range(0.25f, 0.5f), 1, PShape.Line, drag: 2, additive: true);
+                    break;
+                }
+                default:
+                    AudioManager.Play("dive", 0.8f);
+                    break;
+            }
         }
 
         private void UpdateAbility(float dt)
@@ -888,7 +1084,7 @@ namespace HolyPeak.Scenes
             _pv.Update(_room.P, dt, 0, _parts, _st);
             if (_phaseT < 2f && _parts.Rng.Chance(dt * 30))
                 _parts.Emit(_room.P.Center + _parts.Rng.InCircle(12), new Vector2(0, -24), G.Hex(0xfff0c0), 0.6f, 1, additive: true);
-            if (_phaseT > 1.6f && (Input.Confirm.Pressed || Input.Jump.Pressed || Input.Strike.Pressed || (_replay != null && _phaseT > 2f)))
+            if (_phaseT > 1.6f && (Input.Confirm.Pressed || Input.Jump.Pressed || Input.Strike.Pressed || (_replay != null && _phaseT > 2f) || (Game.Auto?.AutoFight == true && _phaseT > 2f)))
             {
                 Input.Confirm.Consume(); Input.Jump.Consume(); Input.Strike.Consume();
                 AudioManager.Play("select", 0.7f);

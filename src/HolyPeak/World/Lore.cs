@@ -24,6 +24,8 @@ namespace HolyPeak.World
                             "Another pilgrim. Every hundred years one of you climbs, and none come down.",
                             "The road up the mountain is a cliff now. Only iron could hold to it.",
                             "West, through the Thornwood, the old smiths left their grips. Something guards them. Something with tusks.",
+                            "Before you go: our old well leads down to the wayside chapel. Pilgrims left a psalm there, for anyone brave enough to read it.",
+                            "And the children climb the watchtower to play on the rooftops. They say something shines up there.",
                             "Rest at the shrine before you go. If you fall, it is the shrine that will remember you.");
                     if (!bell)
                         return S("Elder Bram",
@@ -44,12 +46,15 @@ namespace HolyPeak.World
                         "Hush, pilgrim. Listen. Do you hear it? Neither do I.",
                         "The great bell at the summit has been silent for a thousand years. They say the valley has not seen a true dawn since.",
                         "I came to pray beneath it. I got as far as this village.",
-                        "Strike with {STRIKE}. Hold {DOWN} and strike in the air to bounce off creatures and thorns.");
+                        "Strike with {STRIKE}. Hold {DOWN} and strike in the air to bounce off creatures and thorns.",
+                        "Every blow you land gathers grace. Kneel and hold {HEAL} to turn it into a flame of vigil.",
+                        "Or spend it on a psalm, if you learn one. The same grace heals you or burns for you. Choose well.");
                 case "ione-abbey":
                     return S("Sister Ione",
                         "You made it this far! The monks of this abbey were my order, long ago.",
                         "They cast their windows from bell-glass, which shatters when the right note is rung.",
-                        "Their hand-bell is still here somewhere, deeper in. And the abbot... he never left either.");
+                        "Their hand-bell is still here somewhere, deeper in. And the abbot... he never left either.",
+                        "Below the crypt is the old scriptorium. The brothers wrote one psalm there that falls like a star.");
                 case "ione-frost":
                     return S("Sister Ione",
                         "The cold has teeth up here. So does the thing beneath the snow.",
@@ -63,6 +68,7 @@ namespace HolyPeak.World
                 case "tam":
                     return S("Old Tam",
                         "Ah! A pilgrim with pockets! Embers for wares, wares for embers.",
+                        "Charms, too. Wear them at a shrine, as many as your notches allow.",
                         "The mountain takes, and Tam gives. For a price.");
             }
             return S("Pilgrim", "...");
@@ -106,10 +112,15 @@ namespace HolyPeak.World
         public static readonly Ware[] Wares =
         {
             new Ware { Id = "map", Name = "Surveyor's Map", Desc = "Marks every chamber of the mountain on your map.", Price = 40 },
-            new Ware { Id = "whet1", Name = "Whetstone", Desc = "Your staff strikes harder.", Price = 180 },
-            new Ware { Id = "charm", Name = "Ember Charm", Desc = "Embers fly to you from further, and creatures drop more.", Price = 150 },
-            new Ware { Id = "flask", Name = "Balm Flask", Desc = "One more flask of healing balm.", Price = 220 },
+            new Ware { Id = "c-stride", Name = "Charm: Pilgrim's Stride", Desc = "Worn soles that remember every road. You run faster.", Price = 80 },
+            new Ware { Id = "c-votive", Name = "Charm: Votive Cup", Desc = "Your strikes gather more grace, for spells and for healing.", Price = 120 },
+            new Ware { Id = "charm", Name = "Charm: Ember Charm", Desc = "Creatures drop more embers, and embers fly to you from further away.", Price = 150 },
+            new Ware { Id = "c-ward", Name = "Charm: Thornward", Desc = "Thorns still send you back, but no longer burn a flame.", Price = 160 },
+            new Ware { Id = "whet1", Name = "Whetstone", Desc = "Your staff strikes harder. Your spells grow with it.", Price = 180 },
+            new Ware { Id = "notch1", Name = "Charm Notch", Desc = "Room for one more charm's worth.", Price = 200 },
+            new Ware { Id = "flask", Name = "Grace Vessel", Desc = "Hold more grace: one more heal or spell.", Price = 220 },
             new Ware { Id = "heart", Name = "Vessel of Vigil", Desc = "One more flame of vigil: your health grows.", Price = 300 },
+            new Ware { Id = "notch2", Name = "Second Charm Notch", Desc = "Room for yet another charm.", Price = 400, Requires = "notch1" },
             new Ware { Id = "whet2", Name = "Pilgrim's Whetstone", Desc = "Your staff strikes harder still.", Price = 420, Requires = "whet1" },
         };
 

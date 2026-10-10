@@ -37,14 +37,18 @@ namespace HolyPeak.World
         {
             var p = carry;
             p.Spawn(Point.Zero, carry.Facing);
-            p.Hp = carry.Hp; p.MaxHp = carry.MaxHp; p.Flasks = carry.Flasks; p.MaxFlasks = carry.MaxFlasks;
-            p.Damage = carry.Damage; p.Ab = carry.Ab; p.Invuln = carry.Invuln; p.State = PState.Normal;
+            p.Hp = carry.Hp; p.MaxHp = carry.MaxHp; p.Grace = carry.Grace; p.MaxGrace = carry.MaxGrace;
+            p.Damage = carry.Damage; p.Ab = carry.Ab; p.Ch = carry.Ch; p.Sp = carry.Sp; p.Invuln = carry.Invuln; p.State = PState.Normal;
+            p.SpellId = carry.SpellId; p.SwingId = carry.SwingId;
             if (local.HasValue)
             {
                 p.X = (int)MathF.Round(local.Value.X); p.Y = (int)MathF.Round(local.Value.Y);
                 p.Speed = speed;
                 p.OnGround = false;
-                p.AirToll = carry.AirToll;
+                p.AirTolls = carry.AirTolls;
+                p.MomentumT = carry.MomentumT;
+                p.Gliding = carry.Gliding;
+                p.Diving = carry.Diving;
             }
             else if (spawn.HasValue)
             {

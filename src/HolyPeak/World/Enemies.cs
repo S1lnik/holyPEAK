@@ -4,7 +4,7 @@ using HolyPeak.Core;
 
 namespace HolyPeak.World
 {
-    public enum EnemyType : byte { Crawler, Hopper, Wisp, Sentinel, Spitter, Dropper }
+    public enum EnemyType : byte { Crawler, Hopper, Wisp, Sentinel, Spitter, Dropper, Charger, Chorister }
 
     /// <summary>One creature of the mountain. Plain data so rooms stay cheap to copy.</summary>
     public struct Enemy
@@ -19,7 +19,7 @@ namespace HolyPeak.World
         public byte State;
         public float T, T2;
         public float Stun, Flash, Anim;
-        public int LastSwing;
+        public int LastSwing, LastSpell;
         public Vector2 Home, Aim;
         public int Orient;          // spitter: 0 floor, 1 ceiling, 2 on a wall to its left, 3 on a wall to its right
         public bool OnGround;
@@ -38,15 +38,17 @@ namespace HolyPeak.World
     {
         public static Enemy Create(EnemyType type, int tx, int ty, Room room)
         {
-            var e = new Enemy { Type = type, Alive = true, Facing = room.Rand.NextFloat() < 0.5f ? -1 : 1, LastSwing = -1 };
+            var e = new Enemy { Type = type, Alive = true, Facing = room.Rand.NextFloat() < 0.5f ? -1 : 1, LastSwing = -1, LastSpell = -1 };
             (e.W, e.H, e.MaxHp) = type switch
             {
-                EnemyType.Crawler => (12, 8, 4),
-                EnemyType.Hopper => (10, 10, 6),
-                EnemyType.Wisp => (9, 9, 4),
-                EnemyType.Sentinel => (11, 16, 14),
-                EnemyType.Spitter => (10, 10, 6),
-                _ => (10, 8, 4),
+                EnemyType.Crawler => (12, 8, 8),
+                EnemyType.Hopper => (10, 10, 12),
+                EnemyType.Wisp => (9, 9, 8),
+                EnemyType.Sentinel => (11, 16, 28),
+                EnemyType.Spitter => (10, 10, 12),
+                EnemyType.Charger => (14, 10, 16),
+                EnemyType.Chorister => (10, 14, 12),
+                _ => (10, 8, 8),
             };
             e.Hp = e.MaxHp;
             int px = tx * 8, py = ty * 8;
@@ -54,7 +56,7 @@ namespace HolyPeak.World
             e.Y = py + 8 - e.H;
             e.Anim = room.Rand.Range(0, 10);
             e.T = room.Rand.Range(0.3f, 1.5f);
-            if (type == EnemyType.Wisp) e.Y = py + 4 - e.H / 2;
+            if (type == EnemyType.Wisp || type == EnemyType.Chorister) e.Y = py + 4 - e.H / 2;
             if (type == EnemyType.Dropper) e.Y = py;
             if (type == EnemyType.Spitter)
             {
@@ -72,7 +74,7 @@ namespace HolyPeak.World
         public static int Embers(EnemyType t) => t switch
         {
             EnemyType.Crawler => 3, EnemyType.Hopper => 5, EnemyType.Wisp => 4,
-            EnemyType.Sentinel => 11, EnemyType.Spitter => 6, _ => 5,
+            EnemyType.Sentinel => 11, EnemyType.Spitter => 6, EnemyType.Charger => 8, EnemyType.Chorister => 9, _ => 5,
         };
 
         public static void Update(ref Enemy e, Room r, float dt)
@@ -87,7 +89,7 @@ namespace HolyPeak.World
             if (e.Stun > 0)
             {
                 e.Stun -= dt;
-                if (e.Type == EnemyType.Wisp) { e.Speed *= MathF.Max(0, 1 - 6 * dt); Fly(ref e, r, dt); }
+                if (e.Type == EnemyType.Wisp || e.Type == EnemyType.Chorister) { e.Speed *= MathF.Max(0, 1 - 6 * dt); Fly(ref e, r, dt); }
                 else if (e.Type != EnemyType.Spitter && !(e.Type == EnemyType.Dropper && e.State == 0))
                 {
                     e.Speed.X = Calc.Approach(e.Speed.X, 0, 400 * dt);
@@ -249,6 +251,9 @@ namespace HolyPeak.World
                     break;
                 }
 
+                case EnemyType.Charger: UpdateCharger(ref e, r, dt, dx, dy, playerOk, c); break;
+                case EnemyType.Chorister: UpdateChorister(ref e, r, dt, dx, dy, playerOk, c); break;
+
                 case EnemyType.Dropper:
                     switch (e.State)
                     {
@@ -271,6 +276,71 @@ namespace HolyPeak.World
                     }
                     break;
             }
+        }
+
+        /// <summary>The boarlet: paws the ground, then charges headlong until something stops it.</summary>
+        private static void UpdateCharger(ref Enemy e, Room r, float dt, float dx, float dy, bool playerOk, Vector2 c)
+        {
+            switch (e.State)
+            {
+                case 0: // root about
+                    if (playerOk && MathF.Abs(dx) < 128 && MathF.Abs(dy) < 26 && e.OnGround)
+                    {
+                        e.State = 1; e.T = 0.5f; e.Facing = dx >= 0 ? 1 : -1; e.Speed.X = 0;
+                        r.Emit(Ev.EnemyTell, c, index: (int)e.Type);
+                        break;
+                    }
+                    Walk(ref e, r, dt, 18f, true);
+                    return;
+                case 1: // pawing the ground: the tell
+                    e.T -= dt;
+                    e.Speed.X = Calc.Approach(e.Speed.X, 0, 600 * dt);
+                    if (e.T <= 0) { e.State = 2; e.T = 1.6f; r.Emit(Ev.EnemyLunge, c); }
+                    break;
+                case 2: // charge
+                    e.T -= dt;
+                    e.Speed.X = Calc.Approach(e.Speed.X, e.Facing * 165f, 900 * dt);
+                    if (WallAhead(ref e, r))
+                    {
+                        // headlong into a wall: dazed, and open to the staff
+                        e.State = 3; e.T = 1.3f; e.Speed = new Vector2(-e.Facing * 60f, -90f); e.OnGround = false;
+                        r.Emit(Ev.EnemyLand, new Vector2(e.Facing > 0 ? e.X + e.W : e.X, e.Y + e.H / 2f), index: 1);
+                    }
+                    else if (!GroundAhead(ref e, r) || e.T <= 0) { e.State = 4; e.T = 0.6f; }
+                    break;
+                case 3: // dazed
+                    e.T -= dt;
+                    e.Speed.X = Calc.Approach(e.Speed.X, 0, 300 * dt);
+                    if (e.T <= 0) { e.State = 0; e.Facing = dx >= 0 ? 1 : -1; }
+                    break;
+                default: // skid to a stop
+                    e.T -= dt;
+                    e.Speed.X = Calc.Approach(e.Speed.X, 0, 500 * dt);
+                    if (e.T <= 0) { e.State = 0; e.Facing = dx >= 0 ? 1 : -1; }
+                    break;
+            }
+            Fall(ref e, r, dt);
+        }
+
+        /// <summary>The chorister: a ghost of the abbey's choir. It sings rings of sound; answer them with the bell.</summary>
+        private static void UpdateChorister(ref Enemy e, Room r, float dt, float dx, float dy, bool playerOk, Vector2 c)
+        {
+            float dist = MathF.Sqrt(dx * dx + dy * dy);
+            e.Facing = dx >= 0 ? 1 : -1;
+            var target = e.Home + new Vector2(MathF.Sin(e.Anim * 0.6f) * 18f, MathF.Sin(e.Anim * 1.3f) * 8f);
+            e.Speed = Calc.Approach(e.Speed, (target - c) * 1.5f, 80 * dt);
+            e.T -= dt;
+            if (e.State == 0)
+            {
+                if (playerOk && dist < 140 && e.T <= 0) { e.State = 1; e.T = 0.75f; r.Emit(Ev.EnemyTell, c, index: (int)e.Type); }
+            }
+            else if (e.T <= 0)
+            {
+                e.State = 0; e.T = 2.6f;
+                r.Spawn(new Projectile { Type = ProjType.Ring, X = c.X, Y = c.Y, VX = 72f, R = 6, Life = 1.5f, Damage = 1 });
+                r.Emit(Ev.Shoot, c, index: 2);
+            }
+            Fly(ref e, r, dt);
         }
 
         public static Vector2 MouthDir(in Enemy e) => e.Orient switch
@@ -344,7 +414,7 @@ namespace HolyPeak.World
         }
     }
 
-    public enum ProjType : byte { Glob, Orb, Shard, Flame, Wave, Thorn, Icicle, Note, Rock, Ring }
+    public enum ProjType : byte { Glob, Orb, Shard, Flame, Wave, Thorn, Icicle, Note, Rock, Ring, Bolt }
 
     public struct Projectile
     {
@@ -354,6 +424,9 @@ namespace HolyPeak.World
         public float Delay;         // harmless and motionless until T reaches this (a telegraph)
         public int Damage;
         public bool HitsTerrain;
+        public bool Friendly;       // the pilgrim's own (a lantern bolt): hurts creatures, never the pilgrim
+        public ulong HitMask;       // creatures a piercing bolt has already burned
+        public bool HitBoss;
         public bool Armed => T >= Delay;
         public bool Breakable => Type == ProjType.Glob || Type == ProjType.Orb || Type == ProjType.Note;
     }

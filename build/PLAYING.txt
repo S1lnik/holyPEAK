@@ -19,22 +19,45 @@ that it is cached.
 
 Controls
 --------
-                    Arrows layout    WASD layout     Gamepad
+Every action can be rebound (two keys each, plus a gamepad button) under
+Options > Controls. These are the defaults:
+
+                    Keyboard         Alternate       Gamepad
 Move / look         Arrow keys       WASD            Left stick / D-pad
 Jump / open kite    Z                Space           A
 Strike              X                J               X
-Ring the bell       C                K               Y or RB
-Heal (hold)         V                L               B or LB
+Ring the bell       C                K               Y
+Cast a psalm        F                I               RB or RT
+Heal (hold)         V                L               B, LB or LT
 Rest / talk / use   Up               W               Up
-Map                 Tab or M         Tab or M        Back
-Pause               Esc or Enter     Esc or Enter    Start
+Map                 Tab              M               Back
+Pause               Esc              P               Start
 Fullscreen          F11
 
-Hold Down and strike in the air to bounce off creatures and thorns.
+Moving
+------
+Press toward a ledge you can reach to pull yourself up onto it.
+Hold Down and strike while running to vault forward on your staff.
+Jump at a rope, vine or chain to catch it: push left and right to swing,
+Up and Down to climb, and jump to let go with the speed of the swing.
+Strike a hanging lantern to be thrown away from it, or from above to bounce.
+Hold Down and strike in the air to bounce off creatures and upward thorns.
 Hold Down and jump on a thin ledge to drop through it.
 
-Rest at shrines to heal, refill your balm flasks and save. If you fall, you
-wake at the last shrine and your embers wait where you fell: go back for them.
+Grace, psalms and charms
+------------------------
+Every blow your staff lands gathers grace (the bar of light under your
+flames). Hold Heal to turn grace into a flame of vigil, or press Cast to
+spend the same grace on a psalm: it hits for half as much as your staff, but
+at range or over an area. Hold Down or Up while casting for other psalms
+once you have found them.
+
+Charms change how you play. Wear them when you rest at a shrine, as many as
+your notches allow.
+
+Rest at shrines to heal, change charms and save. If you fall, you wake at the
+last shrine and your embers wait where you fell: go back for them.
 
 Assist options (game speed, invincibility) are in Options.
 Saves are written to a "HolyPeak" folder in your user application-data folder.
+Saves from Holy Peak 2.0 carry over.

@@ -19,6 +19,7 @@ namespace HolyPeak.Verify
         public static int Main(string[] args)
         {
             string filter = null, replayDir = null, pathDir = null;
+            bool reach = false;
             int k = 5, maxNodes = 1_200_000;
             for (int i = 0; i < args.Length; i++)
             {
@@ -29,6 +30,7 @@ namespace HolyPeak.Verify
                     case "--paths": pathDir = args[++i]; break;
                     case "--k": k = int.Parse(args[++i]); break;
                     case "--max": maxNodes = int.Parse(args[++i]); break;
+                    case "--reach": reach = true; break;
                     case "--walk": return Walker.Run(args[++i], k, maxNodes);
                 }
             }
@@ -43,8 +45,33 @@ namespace HolyPeak.Verify
                 if (filter != null && !c.Name.Contains(filter) && !c.Room.StartsWith(filter)) continue;
                 var t0 = sw.Elapsed;
                 var room = c.Build();
-                var solver = new Solver(room, c, k, c.ExpectFail ? maxNodes / 4 : maxNodes);
-                var path = solver.Solve(out int nodes);
+                int budget = c.Budget > 0 ? c.Budget : (c.ExpectFail ? maxNodes / 4 : maxNodes);
+                List<PlayerInput> path = null, first = new List<PlayerInput>();
+                int nodes = 0;
+                bool stuck = false;
+                for (int v = 0; v < c.Vias.Count && !stuck; v++)
+                {
+                    var before = room.Save();
+                    var toVia = new Solver(room, c.ToWaypoint(v), k, budget);
+                    var leg = toVia.Solve(out int n1);
+                    room.Load(before);
+                    nodes += n1;
+                    if (leg == null)
+                    {
+                        stuck = true;
+                        if (reach) foreach (var line in toVia.ReachMap()) Console.WriteLine($"  via{v} " + line);
+                        break;
+                    }
+                    foreach (var inp in leg) room.Update(inp, 1f / 60f);
+                    first.AddRange(leg);
+                }
+                var solver = new Solver(room, c, k, budget);
+                if (!stuck)
+                {
+                    path = solver.Solve(out int n2);
+                    nodes += n2;
+                    if (path != null) path.InsertRange(0, first);
+                }
                 double dt = (sw.Elapsed - t0).TotalSeconds;
                 bool ok = c.ExpectFail ? path == null : path != null;
                 if (!ok) failures++;
@@ -55,6 +82,8 @@ namespace HolyPeak.Verify
                     Directory.CreateDirectory(replayDir);
                     WriteReplay(Path.Combine(replayDir, Safe(c.Name) + ".txt"), path);
                 }
+                if (path == null && reach && !c.ExpectFail)
+                    foreach (var line in solver.ReachMap()) Console.WriteLine("     " + line);
                 if (path != null && pathDir != null)
                 {
                     Directory.CreateDirectory(pathDir);
@@ -73,7 +102,7 @@ namespace HolyPeak.Verify
             foreach (var i in inputs)
                 sb.Append(i.MoveX).Append(' ').Append(i.MoveY).Append(' ')
                   .Append(i.Jump ? 1 : 0).Append(i.JumpPressed ? 1 : 0).Append(i.StrikePressed ? 1 : 0)
-                  .Append(i.TollPressed ? 1 : 0).Append(i.Heal ? 1 : 0).Append(i.InteractPressed ? 1 : 0).Append('\n');
+                  .Append(i.TollPressed ? 1 : 0).Append(i.Heal ? 1 : 0).Append(i.InteractPressed ? 1 : 0).Append(i.CastPressed ? 1 : 0).Append('\n');
             File.WriteAllText(path, sb.ToString());
         }
 
@@ -108,6 +137,22 @@ namespace HolyPeak.Verify
         public int Gx0, Gy0, Gx1, Gy1;      // touch: tile rect
         public string GoalFlag;
         public bool ExpectFail;
+        public Charm Charms;
+        public Spell Spells;
+        public int Budget;                  // search nodes, when a route needs more than the default
+        public bool Stand;                  // a touch only counts while standing on something (waypoints)
+        public List<Microsoft.Xna.Framework.Rectangle> Vias = new List<Microsoft.Xna.Framework.Rectangle>();   // waypoints (tiles), in order
+
+        /// <summary>The same check, aimed at one of its waypoints instead of its goal.</summary>
+        public Check ToWaypoint(int i)
+        {
+            var w = (Check)MemberwiseClone();
+            var v = Vias[i];
+            w.Goal = GoalKind.Touch; w.Gx0 = v.X; w.Gy0 = v.Y; w.Gx1 = v.Right - 1; w.Gy1 = v.Bottom - 1;
+            w.ExpectFail = false; w.Vias = new List<Microsoft.Xna.Framework.Rectangle>();
+            w.Stand = true;
+            return w;
+        }
 
         public Room Build()
         {
@@ -116,7 +161,8 @@ namespace HolyPeak.Verify
             var room = new HolyPeak.World.Room(def, flags, noEnemies: true) { RecordEvents = false };
             var p = new PlayerSim();
             p.Spawn(new Microsoft.Xna.Framework.Point(StartX * 8 + 1, StartY * 8 + 8 - PlayerSim.H), Vx < 0 ? -1 : 1);
-            p.Hp = p.MaxHp = 5; p.Damage = 2; p.Ab = Ab;
+            p.Hp = p.MaxHp = 5; p.Damage = 4; p.Ab = Ab; p.Ch = Charms; p.Sp = Spells;
+            p.Grace = p.MaxGrace = 999;
             p.Speed = new Microsoft.Xna.Framework.Vector2(Vx, Vy);
             p.OnGround = Vy == 0;
             room.P = p;
@@ -137,7 +183,7 @@ namespace HolyPeak.Verify
         {
             public sbyte Mx, My;
             public byte Jump;      // 0 none, 1 press then hold, 2 hold
-            public bool Strike, Toll, Up;
+            public bool Strike, Toll, Up, Cast;
         }
 
         private sealed class Node
@@ -161,14 +207,21 @@ namespace HolyPeak.Verify
             bool thorns = room.Tiles.Any(HolyPeak.World.Room.IsThorn);
             bool platforms = room.Tiles.Any(t => t == Tile.Platform);
             bool walls = room.Groups.Any(g => g.Kind == Tile.Breakable) || room.Things.Any(t => t.Kind == ThingKind.Lever || t.Kind == ThingKind.Cache);
+            bool lanterns = room.Things.Any(t => t.Kind == ThingKind.Lantern);
             if (c.Ab.HasFlag(Abilities.Bell))
                 for (sbyte mx = -1; mx <= 1; mx++)
                 {
                     acts.Add(new Act { Mx = mx, Jump = 2, Toll = true });
                     acts.Add(new Act { Mx = mx, Jump = 0, Toll = true });
                 }
-            if (thorns)
+            if (thorns || lanterns)
                 for (sbyte mx = -1; mx <= 1; mx++) acts.Add(new Act { Mx = mx, My = 1, Strike = true, Jump = 2 });
+            if (lanterns)
+                for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, Strike = true, Jump = 2 });
+            // the staff vault: down + strike while running
+            for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, My = 1, Strike = true });
+            // the falling star breaks cracked floors
+            if (c.Spells.HasFlag(Spell.Star) && room.Groups.Any(g => g.Kind == Tile.Breakable || g.Kind == Tile.Slab)) acts.Add(new Act { My = 1, Cast = true });
             if (walls)
                 for (sbyte mx = -1; mx <= 1; mx += 2) acts.Add(new Act { Mx = mx, Strike = true });
             if (walls) acts.Add(new Act { My = -1, Strike = true });
@@ -185,7 +238,15 @@ namespace HolyPeak.Verify
             int cols = _room.Cols, rows = _room.Rows;
             var dist = Enumerable.Repeat(int.MaxValue, cols * rows).ToArray();
             var q = new Queue<int>();
-            bool Passable(int tx, int ty) => !HolyPeak.World.Room.IsSolidTile(_room.TileAt(tx, ty));
+            bool Passable(int tx, int ty)
+            {
+                var t = _room.TileAt(tx, ty);
+                if (HolyPeak.World.Room.IsSolidTile(t) || HolyPeak.World.Room.IsThorn(t)) return false;
+                if (t == Tile.Gate) return _room.GatesOpen || _room.Things.Any(th => th.Kind == ThingKind.Lever && !th.Used);
+                if (t == Tile.BellGlass) return _c.Ab.HasFlag(Abilities.Bell);
+                if (t == Tile.Slab) return _c.Spells.HasFlag(Spell.Star);
+                return true;
+            }
             void Seed(int tx, int ty)
             {
                 if (tx < 0 || ty < 0 || tx >= cols || ty >= rows || !Passable(tx, ty)) return;
@@ -264,7 +325,7 @@ namespace HolyPeak.Verify
                 case GoalKind.Touch:
                 {
                     var r = new Microsoft.Xna.Framework.Rectangle(_c.Gx0 * 8, _c.Gy0 * 8, (_c.Gx1 - _c.Gx0 + 1) * 8, (_c.Gy1 - _c.Gy0 + 1) * 8);
-                    return r.Intersects(_room.P.Hitbox);
+                    return r.Intersects(_room.P.Hitbox) && (!_c.Stand || _room.SolidOrPlatformBelow(_room.P.X, _room.P.Y, PlayerSim.W, PlayerSim.H));
                 }
                 case GoalKind.Bell:
                     return _room.NearThing >= 0 && _room.Things[_room.NearThing].Kind == ThingKind.GreatBell && _room.P.OnGround;
@@ -289,18 +350,39 @@ namespace HolyPeak.Verify
             Mix(p.X); Mix(p.Y);
             Mix((long)MathF.Round(p.Speed.X / 24f));
             Mix((long)MathF.Round(p.Speed.Y / 24f));
-            Mix((p.OnGround ? 1 : 0) | (p.Clinging ? 2 : 0) | (p.Gliding ? 4 : 0) | (p.AirToll ? 8 : 0) | (p.Rising ? 16 : 0)
-                | (p.ForceMoveTimer > 0 ? 32 : 0) | (p.DropT > 0 ? 64 : 0) | (p.TollCooldownT > 0 ? 128 : 0) | (p.Attack != Strike.None ? 256 : 0));
+            Mix((p.OnGround ? 1 : 0) | (p.Clinging ? 2 : 0) | (p.Gliding ? 4 : 0) | (p.AirTolls << 3) | (p.Rising ? 32 : 0)
+                | (p.ForceMoveTimer > 0 ? 64 : 0) | (p.DropT > 0 ? 128 : 0) | (p.TollCooldownT > 0 ? 256 : 0) | (p.Attack != Strike.None ? 512 : 0)
+                | (p.MomentumT > 0 ? 1024 : 0) | (p.MantleT > 0 ? 2048 : 0) | (p.Diving ? 4096 : 0) | (p.LandLagT > 0 ? 8192 : 0) | (p.RopeCd > 0 ? 16384 : 0));
             if (p.Clinging) Mix((long)(Math.Min(p.ClingTimer, 0.4f) / 0.1f));
+            if (p.Rope >= 0) { Mix(100 + p.Rope); Mix((long)MathF.Round(p.RopeAngle * 10)); Mix((long)MathF.Round(p.RopeVel * 2)); Mix((long)MathF.Round(p.RopeLen / 4)); }
             for (int i = 0; i < _room.Groups.Length; i++)
             {
                 var g = _room.Groups[i];
                 Mix(g.Gone ? 1 : 0);
                 if (g.Kind == Tile.Resonance) Mix((long)(g.Timer / 0.25f) * 2 + (g.Pending ? 1 : 0));
                 if (g.Kind == Tile.Breakable) Mix(g.Hp);
+                if (g.Kind == Tile.Crumble) Mix((g.Gone ? 1000 : 0) + (long)(g.Timer / 0.1f) + (long)(g.Regrow / 0.25f) * 10);
             }
-            for (int i = 0; i < _room.Things.Length; i++) Mix(_room.Things[i].Used ? 1 : 0);
+            for (int i = 0; i < _room.Things.Length; i++)
+            {
+                Mix(_room.Things[i].Used ? 1 : 0);
+                if (_room.Things[i].Kind == ThingKind.Lantern) Mix((long)(_room.Things[i].T / 0.1f));
+            }
             return h;
+        }
+
+        private readonly HashSet<int> _reached = new HashSet<int>();
+
+        /// <summary>The room's map with every tile the search reached marked '+' (for designing rooms).</summary>
+        public List<string> ReachMap()
+        {
+            var grid = _room.Def.Map.Select(r => r.ToCharArray()).ToArray();
+            foreach (int i in _reached)
+            {
+                int x = i % _room.Cols, y = i / _room.Cols;
+                if (grid[y][x] == '.' || grid[y][x] == ':' || grid[y][x] == 'u') grid[y][x] = '+';
+            }
+            return grid.Select(r => new string(r)).ToList();
         }
 
         public List<PlayerInput> Solve(out int expanded)
@@ -332,6 +414,9 @@ namespace HolyPeak.Verify
                     var child = new Node { Parent = node, Act = a, G = node.G + _k };
                     if (done) return Reconstruct(child, start);
                     if (!seen.Add(Key())) continue;
+                    var pc = _room.P.Center;
+                    int rx = (int)(pc.X / 8), ry = (int)(pc.Y / 8);
+                    if (rx >= 0 && ry >= 0 && rx < _room.Cols && ry < _room.Rows) _reached.Add(ry * _room.Cols + rx);
                     child.S = _room.Save();
                     open.Enqueue(child, child.G + H() * 8);
                 }
@@ -348,6 +433,7 @@ namespace HolyPeak.Verify
             StrikePressed = act.Strike && f == 0,
             TollPressed = act.Toll && f == 0,
             InteractPressed = act.Up && f == 0,
+            CastPressed = act.Cast && f == 0,
         };
 
         private List<PlayerInput> Reconstruct(Node end, Room.Snapshot start)

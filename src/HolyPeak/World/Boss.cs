@@ -17,7 +17,7 @@ namespace HolyPeak.World
         public int Facing = -1;
         public int State, Phase = 1;
         public float T, Time, Flash, IntroT, DeathT;
-        public int LastSwing = -1;
+        public int LastSwing = -1, LastSpell = -1;
         public readonly Point Spawn;
         public readonly int EmberReward;
 
@@ -32,7 +32,8 @@ namespace HolyPeak.World
         protected Boss(string id, string name, string title, int hp, Point spawn, int embers)
         {
             Id = id; Name = name; Title = title;
-            Hp = MaxHp = hp;
+            // health is counted in half-strikes, so a spell (half a strike) is a whole number
+            Hp = MaxHp = hp * 2;
             Spawn = spawn;
             X = spawn.X; Y = spawn.Y;
             EmberReward = embers;
@@ -105,7 +106,7 @@ namespace HolyPeak.World
         public virtual void OnToll(Room r, Vector2 c) { }
 
         /// <summary>Whether a strike may land right now (e.g. not while shielded or vanished).</summary>
-        protected virtual bool Vulnerable => true;
+        public virtual bool Vulnerable => true;
 
         public bool HurtboxHit(Rectangle box)
         {

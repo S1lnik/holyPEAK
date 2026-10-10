@@ -28,6 +28,7 @@ namespace HolyPeak
                     case "--pos": (auto ??= new AutomationOptions()).Pos = Next(); break;
                     case "--invincible": (auto ??= new AutomationOptions()).Invincible = true; break;
                     case "--autofight": (auto ??= new AutomationOptions()).AutoFight = true; break;
+                    case "--nohints": (auto ??= new AutomationOptions()).NoHints = true; break;
                     case "--peaceful": (auto ??= new AutomationOptions()).Peaceful = true; break;
                     case "--dump-sprites": (auto ??= new AutomationOptions()).DumpSprites = Next(); break;
                     case "--keys": (auto ??= new AutomationOptions()).Keys = Next(); break;
