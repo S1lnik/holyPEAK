@@ -32,6 +32,7 @@ namespace HolyPeak
         public Settings Settings;
         public SaveData Save;
         public readonly AutomationOptions Auto;
+        public readonly bool AutoAudio;
 
         private SpriteBatch _sb;
         private RenderTarget2D _worldRt, _uiRt, _captureRt;
@@ -59,8 +60,10 @@ namespace HolyPeak
                 HardwareModeSwitch = false,
                 GraphicsProfile = GraphicsProfile.HiDef,
             };
-            // Automated runs draw every simulated frame (no frame skipping) and run as fast as possible.
-            IsFixedTimeStep = auto == null;
+            // Automated runs draw every simulated frame (no frame skipping) and run as fast as possible,
+            // unless audio is being recorded, which needs real time.
+            AutoAudio = auto != null && Environment.GetEnvironmentVariable("HOLYPEAK_AUTO_AUDIO") == "1";
+            IsFixedTimeStep = auto == null || AutoAudio;
             TargetElapsedTime = TimeSpan.FromSeconds(1.0 / 60.0);
             IsMouseVisible = false;
             Window.Title = "Holy Peak";
@@ -98,7 +101,7 @@ namespace HolyPeak
             Sprites.Init();
             _worldRt = new RenderTarget2D(GraphicsDevice, G.ViewW + 2, G.ViewH + 2);
             _uiRt = new RenderTarget2D(GraphicsDevice, G.ViewW, G.ViewH);
-            if (Auto == null) AudioManager.Init();
+            if (Auto == null || AutoAudio) AudioManager.Init();
             ApplyAudioSettings();
 
             Scene first;
@@ -215,7 +218,11 @@ namespace HolyPeak
 
             if (_quitRequested) Exit();
 
-            if (Auto != null) _frame++;
+            if (Auto != null)
+            {
+                _frame++;
+                if (_frame > Auto.Frames + 2) Exit();   // safety net if the final Draw was skipped
+            }
             base.Update(gameTime);
         }
 

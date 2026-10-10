@@ -112,20 +112,20 @@ namespace HolyPeak.Scenes
                 case 1:
                 {
                     float a = Calc.Clamp01(_t / 0.8f);
-                    Fx.Panel(sb, 54, 26, G.ViewW - 108, 128, a, accent);
-                    font.DrawCentered(sb, "The Summit", new Vector2(G.ViewW / 2f, 36), accent * a, Color.Black * a, 2f);
-                    Fx.Ornament(sb, new Vector2(G.ViewW / 2f, 62), 60, accent * (0.7f * a));
+                    Fx.Panel(sb, 54, 22, G.ViewW - 108, 138, a, accent);
+                    font.DrawCentered(sb, "The Summit", new Vector2(G.ViewW / 2f, 30), accent * a, Color.Black * a, 2f);
+                    Fx.Ornament(sb, new Vector2(G.ViewW / 2f, 55), 60, accent * (0.7f * a));
                     double time = Save.FirstClearTime > 0 ? Save.FirstClearTime : Save.PlayTime;
                     int deaths = Save.FirstClearTime > 0 ? Save.FirstClearDeaths : Save.Deaths;
-                    Row(sb, "Time", Calc.FormatTime(time), 72, a);
-                    Row(sb, "Deaths", deaths.ToString(), 86, a);
-                    Row(sb, "Embers", $"{Save.Embers.Count} / {Levels.EmberCount}", 100, a);
+                    Row(sb, "Time", Calc.FormatTime(time), 64, a);
+                    Row(sb, "Deaths", deaths.ToString(), 76, a);
+                    Row(sb, "Embers", $"{Save.Embers.Count} / {Levels.EmberCount}", 88, a);
                     string note = Save.Embers.Count >= Levels.EmberCount
-                        ? "Every flame was carried to the top."
+                        ? "Every flame was carried to the top.\nYour scarf now glows gold."
                         : (Save.Embers.Count > 0 ? "Some flames still wait on the mountain." : "The flames of the mountain wait for you.");
-                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 118), new Color(220, 210, 190) * a);
-                    if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 130), new Color(150, 150, 170) * a);
-                    if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 140), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
+                    font.DrawCentered(sb, note, new Vector2(G.ViewW / 2f, 104), new Color(220, 210, 190) * a);
+                    if (Save.UsedAssist) font.DrawCentered(sb, "(assist mode was used)", new Vector2(G.ViewW / 2f, 128), new Color(150, 150, 170) * a);
+                    if (_t > 1.5f) font.DrawCentered(sb, Input.Format("{CONFIRM}"), new Vector2(G.ViewW / 2f, 142), Color.White * (0.5f + 0.3f * MathF.Sin(_time * 4)));
                     break;
                 }
                 case 2:
@@ -158,9 +158,9 @@ namespace HolyPeak.Scenes
         private static void Row(SpriteBatch sb, string label, string value, float y, float a)
         {
             var font = G.Font;
-            font.Draw(sb, label, new Vector2(100, y), new Color(170, 165, 200) * a);
+            font.Draw(sb, label, new Vector2(96, y), new Color(170, 165, 200) * a);
             float w = font.Measure(value);
-            font.Draw(sb, value, new Vector2(G.ViewW - 100 - w, y), Color.White * a);
+            font.Draw(sb, value, new Vector2(G.ViewW - 96 - w, y), Color.White * a);
         }
     }
 }

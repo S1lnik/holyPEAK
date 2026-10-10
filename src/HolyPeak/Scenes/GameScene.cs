@@ -180,6 +180,7 @@ namespace HolyPeak.Scenes
             _parts.Clear();
             _pv.Reset(_room.P);
             _pv.GiftBlend = 1f;
+            _pv.Golden = Save.Embers.Count >= Levels.EmberCount;
             SnapCamera();
             if (newChapter) InitAmbient();
             if (_chapter > Save.MaxChapter) Save.MaxChapter = _chapter;
@@ -402,8 +403,9 @@ namespace HolyPeak.Scenes
         private void Shake(float time, float mag)
         {
             if (!Cfg.ScreenShake) return;
+            bool active = _shakeT > 0;
+            _shakeMag = active ? Math.Max(_shakeMag, mag) : mag;
             _shakeT = Math.Max(_shakeT, time);
-            _shakeMag = Math.Max(_shakeT > 0 ? _shakeMag : 0, mag);
         }
 
         private void ProcessEvents()
@@ -569,6 +571,7 @@ namespace HolyPeak.Scenes
             if (securedEmber)
             {
                 Save.Embers.Add(_room.Def.Id);
+                if (Save.Embers.Count >= Levels.EmberCount) _pv.Golden = true;
                 _emberPopup = 3f;
                 AudioManager.Play("embersecure", 0.7f);
             }
@@ -588,13 +591,10 @@ namespace HolyPeak.Scenes
 
         // ---- the shrine --------------------------------------------------------------------
 
-        private Vector2 _giftPos;
-
         private void StartGift(Vector2 at)
         {
             _phase = Phase.Gift;
             _phaseT = 0;
-            _giftPos = at;
             Save.HasDash = true;
             Game.WriteSave();
             _pv.GiftBlend = 0f;

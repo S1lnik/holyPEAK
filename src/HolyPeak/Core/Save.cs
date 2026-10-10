@@ -54,7 +54,8 @@ namespace HolyPeak.Core
         /// <summary>Overrides the storage folder (used by automated runs so they never touch real saves).</summary>
         public static string OverrideFolder;
 
-        private static string Dir => OverrideFolder ?? Folder;
+        /// <summary>The folder actually in use (honours <see cref="OverrideFolder"/>).</summary>
+        public static string Dir => OverrideFolder ?? Folder;
 
         public static T Load<T>(string name) where T : new()
         {

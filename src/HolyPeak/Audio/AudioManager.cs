@@ -58,7 +58,7 @@ namespace HolyPeak.Audio
         private const string CacheVersion = "v4";
 
         private static string CachePath(SongId id)
-            => System.IO.Path.Combine(Core.Storage.Folder, "cache", $"music-{CacheVersion}-{id}.pcm");
+            => System.IO.Path.Combine(Core.Storage.Dir, "cache", $"music-{CacheVersion}-{id}.pcm");
 
         private static void Render(SongId id)
         {

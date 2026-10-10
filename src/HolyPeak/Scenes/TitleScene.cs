@@ -34,6 +34,7 @@ namespace HolyPeak.Scenes
             _pilgrim.Spawn(new Point(52, 150), Save.HasDash);
             _pilgrim.Facing = 1;
             _pv.Reset(_pilgrim);
+            _pv.Golden = Save.Embers.Count >= Levels.EmberCount;
             var rng = new Rng(77);
             _snow = new Vector2[120];
             _snowS = new float[_snow.Length];
@@ -141,7 +142,6 @@ namespace HolyPeak.Scenes
             _bd.Draw(sb, cam, new Point(G.ViewW, G.ViewH), _time);
 
             // a rocky outcrop for the pilgrim to stand on
-            var st = Style.Title;
             Color rock = G.Hex(0x0d1028), rockL = G.Hex(0x272c55), snowC = G.Hex(0xdfe8ff);
             for (int x = 0; x < 120; x++)
             {
@@ -149,24 +149,19 @@ namespace HolyPeak.Scenes
                 G.Rect(sb, x, MathF.Round(h), 1, G.ViewH - h, rock);
                 G.Rect(sb, x, MathF.Round(h), 1, 2, x < 70 ? snowC : rockL);
             }
-            _pilgrim.Y = (int)MathF.Round(160 - 26 + MathF.Abs(54 - 54) * 0.55f) - PlayerSim.H + 1;
+            _pilgrim.Y = 160 - 26 - PlayerSim.H + 1;   // the summit of the outcrop
             _pilgrim.X = 51;
             _pv.Draw(sb, _pilgrim);
             _parts.Draw(sb, false);
 
-            foreach (var (p, i) in Indexed(_snow))
+            for (int i = 0; i < _snow.Length; i++)
             {
+                var p = _snow[i];
                 float s = _snowS[i];
                 G.Rect(sb, MathF.Round(p.X), MathF.Round(p.Y), s > 0.8f ? 2 : 1, s > 0.8f ? 2 : 1, Color.White * (0.35f + s * 0.5f));
             }
             sb.Draw(G.Vignette, Vector2.Zero, Color.White);
             sb.End();
-            _ = st;
-        }
-
-        private static System.Collections.Generic.IEnumerable<(Vector2, int)> Indexed(Vector2[] a)
-        {
-            for (int i = 0; i < a.Length; i++) yield return (a[i], i);
         }
 
         public override void DrawUI(SpriteBatch sb)

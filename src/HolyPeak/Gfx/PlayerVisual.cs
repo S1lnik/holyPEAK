@@ -16,6 +16,10 @@ namespace HolyPeak.Gfx
     {
         public static readonly Color ScarfNoDash = G.Hex(0xe9dcc0);
         public static readonly Color ScarfReady = G.Hex(0xe2333f);
+        public static readonly Color ScarfGold = G.Hex(0xffc94a);
+        /// <summary>Set once every ember has been carried to the top: the scarf glows gold.</summary>
+        public bool Golden;
+        private Color Ready => Golden ? ScarfGold : ScarfReady;
         public static readonly Color ScarfSpent = G.Hex(0x5cb8ff);
 
         private const int ScarfLen = 6;
@@ -115,7 +119,7 @@ namespace HolyPeak.Gfx
             if (_flash > 0) _flash -= dt;
 
             // Scarf colour follows dash state.
-            Color target = !p.DashAbility ? ScarfNoDash : (p.Dashes > 0 ? ScarfReady : ScarfSpent);
+            Color target = !p.DashAbility ? ScarfNoDash : (p.Dashes > 0 ? Ready : ScarfSpent);
             target = Color.Lerp(ScarfNoDash, target, GiftBlend);
             _scarfColor = _flash > 0 ? Color.White : Color.Lerp(_scarfColor, target, Calc.Damp(30f, dt));
 
@@ -145,7 +149,7 @@ namespace HolyPeak.Gfx
                 if (_ghostTimer <= 0)
                 {
                     _ghostTimer = 0.035f;
-                    _ghosts.Add(new Ghost { Pos = Feet(p), Frame = _frame, Flip = p.Facing < 0, Scale = Scale, Life = 0.28f, Color = ScarfReady });
+                    _ghosts.Add(new Ghost { Pos = Feet(p), Frame = _frame, Flip = p.Facing < 0, Scale = Scale, Life = 0.28f, Color = Ready });
                 }
             }
             for (int i = _ghosts.Count - 1; i >= 0; i--)
